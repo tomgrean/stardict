@@ -7,5 +7,3 @@ homepage = "https://github.com/saturn-xiv/stardict"
 license = "MIT"
 
 [dependencies]
-log = "0.4"
-failure = "0.1"

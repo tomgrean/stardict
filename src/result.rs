@@ -1,13 +1,35 @@
-use std::result::Result as StdResult;
+use std::{io, str, num, fmt};
 
-use failure::{Error as FailureError, Fail};
+#[derive(Debug)]
+pub enum DictError {
+    Io(io::Error),
+    Utf8(str::Utf8Error),
+    Parse(num::ParseIntError),
+    My(String),
+}
 
-pub type Result<T> = StdResult<T, FailureError>;
-
-#[derive(Fail, Debug)]
-pub enum Error {
-    #[fail(display = "{}", _0)]
-    Io(#[fail(cause)] std::io::Error),
-    #[fail(display = "{}", _0)]
-    Utf8(#[fail(cause)] std::str::Utf8Error),
+impl From<io::Error> for DictError {
+    fn from(err: io::Error) -> Self {
+        DictError::Io(err)
+    }
+}
+impl From<str::Utf8Error> for DictError {
+    fn from(err: str::Utf8Error) -> Self {
+        DictError::Utf8(err)
+    }
+}
+impl From<num::ParseIntError> for DictError {
+    fn from(err: num::ParseIntError) -> Self {
+        DictError::Parse(err)
+    }
+}
+impl fmt::Display for DictError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            DictError::Io(err) => write!(f, "{}", err),
+            DictError::Utf8(err) => write!(f, "{}", err),
+            DictError::Parse(err) => write!(f, "{}", err),
+            DictError::My(msg) => write!(f, "{}", msg),
+        }
+    }
 }

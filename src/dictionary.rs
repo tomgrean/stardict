@@ -3,7 +3,7 @@ use std::path;
 use super::dict::Dict;
 use super::idx::Idx;
 use super::ifo::Ifo;
-use super::result::Result;
+use super::result::DictError;
 
 pub struct Dictionary {
     pub idx: Idx,
@@ -12,28 +12,28 @@ pub struct Dictionary {
 }
 
 impl Dictionary {
-    pub fn new(root: path::PathBuf) -> Result<Dictionary> {
+    pub fn new(root: path::PathBuf) -> Result<Dictionary, DictError> {
         if let Some(name) = root.file_name() {
             if let Some(name) = name.to_str() {
                 return Ok(Dictionary {
-                    idx: Idx::open(root.join(format!("{}.idx", name)))?,
+                    idx: Idx::open(root.join(format!("{}.idx", name)), false)?,
                     ifo: Ifo::open(root.join(format!("{}.ifo", name)))?,
                     dict: Dict::open(root.join(format!("{}.dict", name)))?,
                 });
             }
         }
-        Err(format_err!("bad dictionary directory {}", root.display()))
+        Err(DictError::My(format!("bad dictionary directory {}", root.display())))
     }
 
-    pub fn search(&mut self, word: &str) -> Result<Vec<TranslationItem>> {
+    pub fn search(&mut self, word: &str) -> Result<Vec<TranslationItem>, DictError> {
         match self.ifo.version.as_ref() {
             "2.4.2" => self.search242(word),
             "3.0.0" => self.search300(word),
-            v => Err(format_err!("bad dictionary version {}", v)),
+            v => Err(DictError::My(format!("bad dictionary version {}", v))),
         }
     }
 
-    fn search242(&mut self, _word: &str) -> Result<Vec<TranslationItem>> {
+    fn search242(&mut self, _word: &str) -> Result<Vec<TranslationItem>, DictError> {
         let mut items = Vec::new();
         items.push(TranslationItem {
             mode: 'h',
@@ -42,7 +42,7 @@ impl Dictionary {
         Ok(items)
     }
 
-    fn search300(&mut self, _word: &str) -> Result<Vec<TranslationItem>> {
+    fn search300(&mut self, _word: &str) -> Result<Vec<TranslationItem>, DictError> {
         let mut items = Vec::new();
         items.push(TranslationItem {
             mode: 'h',

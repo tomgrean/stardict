@@ -1,7 +1,7 @@
 use std::io::BufRead;
 use std::{fs, io, path};
 
-use super::result::Result;
+use super::result::DictError;
 
 #[derive(Debug, Clone)]
 pub struct Ifo {
@@ -19,7 +19,7 @@ pub struct Ifo {
 }
 
 impl Ifo {
-    pub fn open(file: path::PathBuf) -> Result<Ifo> {
+    pub fn open(file: path::PathBuf) -> Result<Ifo, DictError> {
         let mut it = Ifo {
             author: String::new(),
             version: String::new(),
@@ -50,10 +50,11 @@ impl Ifo {
                     "email" => it.email = val,
                     "sametypesequence" => it.same_type_sequence = val,
                     "synwordcount" => it.syn_word_count = val.parse()?,
-                    _ => warn!("Ingnore line: {}", line),
+                    _ => eprintln!("Ingnore line: {}", line),
                 };
             }
         }
         Ok(it)
     }
 }
+

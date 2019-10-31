@@ -1,22 +1,17 @@
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate failure;
-
 pub mod dict;
 pub mod dictionary;
 pub mod idx;
 pub mod ifo;
 pub mod result;
 
-use std::{fs, path};
+use std::{str, fs, path};
 
 pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
 }
 
 impl StarDict {
-    pub fn new(root: path::PathBuf) -> result::Result<StarDict> {
+    pub fn new(root: path::PathBuf) -> Result<StarDict, result::DictError> {
         let mut items = Vec::new();
         if root.is_dir() {
             for it in fs::read_dir(root)? {
@@ -27,7 +22,7 @@ impl StarDict {
                             items.push(it);
                         }
                         Err(e) => {
-                            error!("ignore reason: {}", e);
+                            eprintln!("ignore reason: {:?}", e);
                         }
                     }
                 }
@@ -53,9 +48,23 @@ impl StarDict {
                     info: it.ifo.clone(),
                     results: v,
                 }),
-                Err(e) => warn!("search {} in {} failed: {}", word, it.ifo.name, e),
+                Err(e) => eprintln!("search {} in {} failed: {:?}", word, it.ifo.name, e),
             }
         }
         items
     }
+}
+fn main() {
+    let difo = ifo::Ifo::open(path::PathBuf::from("c.ifo"));
+    match difo {
+        Ok(v) => println!("the ifo is {:?}", v),
+        Err(e) => eprintln!("error! {}", e),
+    }
+    let didx = idx::Idx::open(path::PathBuf::from("c.idx"), false).unwrap();
+    let mut ddict = dict::Dict::open(path::PathBuf::from("c.dict")).unwrap();
+    println!("idx= {:?}", didx.len());
+    let x = &didx.list[1];
+    println!("word={}, offset={}, len={}", x.word, x.offset, x.length);
+    let w = ddict.read(x.offset, x.length as usize).unwrap();
+    println!("the description={}", str::from_utf8(&w).unwrap().to_string());
 }
