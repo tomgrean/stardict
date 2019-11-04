@@ -10,11 +10,7 @@ dictzip -d *.dict.dz
 ```
 
 ## Usage
-
-```
-[dependencies.stardict]
-git = "https://github.com/saturn-xiv/stardict.git"
-```
+just run the stardict command
 
 ## Documents
 
