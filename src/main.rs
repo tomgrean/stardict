@@ -4,7 +4,7 @@ pub mod idx;
 pub mod ifo;
 pub mod result;
 
-use std::{str, fs, path};
+use std::{env, fs, path, str};
 
 pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
@@ -62,9 +62,19 @@ fn main() {
     }
     let didx = idx::Idx::open(path::PathBuf::from("c.idx"), false).unwrap();
     let mut ddict = dict::Dict::open(path::PathBuf::from("c.dict")).unwrap();
-    println!("idx= {:?}", didx.len());
-    let x = &didx.list[1];
-    println!("word={}, offset={}, len={}", x.word, x.offset, x.length);
-    let w = ddict.read(x.offset, x.length as usize).unwrap();
-    println!("the description={}", str::from_utf8(&w).unwrap().to_string());
+    //println!("idx= {:?}", didx.len());
+    //let w = ddict.read(x.offset, x.length as usize).unwrap();
+    //println!("the description={}", String::from_utf8(w).unwrap());
+    for arg in env::args().skip(1) {
+        let i = didx.get(&arg);
+        match i {
+            Ok(i) => {
+                let x = &didx.list[i];
+                println!("----get idx = {:?}", x);
+                let w = ddict.read(x.offset, x.length as usize).unwrap();
+                println!("the description={}", String::from_utf8(w).unwrap());
+            }
+            Err(e) => println!("error: {:?}", e),
+        }
+    }
 }

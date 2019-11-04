@@ -1,4 +1,4 @@
-use std::{io, str, num, fmt};
+use std::{fmt, io, num, str};
 
 #[derive(Debug)]
 pub enum DictError {

@@ -22,33 +22,15 @@ impl Dictionary {
                 });
             }
         }
-        Err(DictError::My(format!("bad dictionary directory {}", root.display())))
+        Err(DictError::My(format!(
+            "bad dictionary directory {}",
+            root.display()
+        )))
     }
 
     pub fn search(&mut self, word: &str) -> Result<Vec<TranslationItem>, DictError> {
-        match self.ifo.version.as_ref() {
-            "2.4.2" => self.search242(word),
-            "3.0.0" => self.search300(word),
-            v => Err(DictError::My(format!("bad dictionary version {}", v))),
-        }
-    }
-
-    fn search242(&mut self, _word: &str) -> Result<Vec<TranslationItem>, DictError> {
-        let mut items = Vec::new();
-        items.push(TranslationItem {
-            mode: 'h',
-            body: "hi v2.4.2".to_string(),
-        });
-        Ok(items)
-    }
-
-    fn search300(&mut self, _word: &str) -> Result<Vec<TranslationItem>, DictError> {
-        let mut items = Vec::new();
-        items.push(TranslationItem {
-            mode: 'h',
-            body: "hi v3.0.0".to_string(),
-        });
-        Ok(items)
+        //self.idx.get(word)?;
+        Err(DictError::My(format!("not implemented")))
     }
 }
 

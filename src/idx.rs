@@ -1,19 +1,19 @@
-use std::path;
+use std::cmp::Ordering;
 use std::fs;
-use std::str;
 use std::io::Read;
+use std::path;
 
 use super::result::DictError;
 
 #[derive(Debug)]
 pub struct IdxData {
-    pub word: String,   //utf-8 string, len() < 256
-    pub offset: u64, //32 or 64 for data bits, indicated from .ifo file idxoffsetbits=64.
-    pub length: u32,   //u32 for data size.
+    pub word: String, //utf-8 string, len() < 256
+    pub offset: u64,  //32 or 64 for data bits, indicated from .ifo file idxoffsetbits=64.
+    pub length: u32,  //u32 for data size.
 }
 #[derive(Debug)]
 pub struct Idx {
-    pub list: Vec<IdxData>
+    pub list: Vec<IdxData>,
 }
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ struct Parser {
     result: Vec<IdxData>,
 }
 impl Parser {
-    fn parse(&mut self, x: u8) -> &mut Self {
+    fn parse(&mut self, x: u8) {
         match self.state {
             ParseState::Word => {
                 if x == 0 {
@@ -40,17 +40,23 @@ impl Parser {
                 } else {
                     self.word.push(x);
                 }
-            },
+            }
             ParseState::Offset(n) => {
                 self.offset = (self.offset << 8) | (x as u64);
                 let ck = if self.off_is_u64 { 7 } else { 3 };
-                self.state = if n < ck {ParseState::Offset(n + 1)} else {ParseState::Length(0)};
-            },
+                self.state = if n < ck {
+                    ParseState::Offset(n + 1)
+                } else {
+                    ParseState::Length(0)
+                };
+            }
             ParseState::Length(n) => {
                 self.length = (self.length << 8) | (x as u32);
-                self.state = if n < 3 {ParseState::Length(n + 1)} else {
-                    self.result.push(IdxData{
-                        word: str::from_utf8(&self.word).unwrap().to_string(),
+                self.state = if n < 3 {
+                    ParseState::Length(n + 1)
+                } else {
+                    self.result.push(IdxData {
+                        word: String::from_utf8(self.word.clone()).unwrap(),
                         offset: self.offset,
                         length: self.length,
                     });
@@ -59,16 +65,17 @@ impl Parser {
                     self.word.clear();
                     ParseState::Word
                 };
-            },
+            }
         }
-        self
     }
 }
 impl Idx {
     pub fn open(file: path::PathBuf, off_is_u64: bool) -> Result<Idx, DictError> {
-        let mut file_con: Vec<u8> = Vec::new();
+        let mut file_con: Vec<u8>;
         {
-            fs::File::open(file)?.read_to_end(&mut file_con)?;
+            let mut idx_file = fs::File::open(file)?;
+            file_con = Vec::with_capacity(idx_file.metadata()?.len() as usize);
+            idx_file.read_to_end(&mut file_con)?;
         }
         let mut con = Parser {
             offset: 0u64,
@@ -78,13 +85,74 @@ impl Idx {
             state: ParseState::Word,
             result: Vec::new(),
         };
-        file_con.iter().fold(&mut con, |acc, x| acc.parse(*x));
-        println!("the second one = {:?}", con.result[0]);
-        Ok(Idx {list: con.result})
+        file_con.iter().for_each(|x| con.parse(*x));
+        //con.result.iter().for_each(|x| println!("word = {}",x.word));
+        Ok(Idx { list: con.result })
     }
-    //pub fn get(word: &str) -> Result<&str, DictError> {
-    //}
+    pub fn get(&self, word: &str) -> Result<usize, DictError> {
+        if let Ok(i) = self
+            .list
+            .binary_search_by(|e| Idx::dict_cmp(&(e.word), word, false))
+        {
+            Ok(i)
+        } else if let Ok(i) = self
+            .list
+            .binary_search_by(|e| Idx::dict_cmp(&(e.word), word, true))
+        {
+            Ok(i)
+        } else {
+            Err(DictError::My(String::from("not found")))
+        }
+    }
     pub fn len(&self) -> usize {
         self.list.len()
+    }
+
+    fn dict_cmp(w1: &str, w2: &str, ignore_case: bool) -> Ordering {
+        let w1len = w1.len();
+        let w2len = w2.len();
+
+        if w1len == 0 || w2len == 0 {
+            return if w1len > 0 {
+                Ordering::Greater
+            } else if w2len > 0 {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            };
+        }
+        let mut case_eq: i32 = 0;
+        let mut ci2 = w2.chars();
+        for c1 in w1.chars() {
+            let c22 = ci2.next();
+            let c2: char;
+            match c22 {
+                None => return Ordering::Greater,
+                Some(c) => c2 = c,
+            }
+            let l2 = c2.to_ascii_lowercase();
+            let l1 = c1.to_ascii_lowercase();
+            if l1 > l2 {
+                return Ordering::Greater;
+            } else if l1 < l2 {
+                return Ordering::Less;
+            }
+            if case_eq == 0 {
+                case_eq = c1 as i32 - c2 as i32;
+            }
+        }
+        if w1len > w2len {
+            Ordering::Greater
+        } else if w1len < w2len {
+            Ordering::Less
+        } else if ignore_case {
+            Ordering::Equal
+        } else if case_eq > 0 {
+            Ordering::Greater
+        } else if case_eq < 0 {
+            Ordering::Less
+        } else {
+            Ordering::Equal
+        }
     }
 }
