@@ -28,20 +28,33 @@ impl Dictionary {
         )))
     }
 
-    pub fn search(&mut self, word: &str) -> Result<Vec<TranslationItem>, DictError> {
-        //self.idx.get(word)?;
-        Err(DictError::My(format!("not implemented")))
+    pub fn neighbors(&self, word: &str, off: i32, length: usize) -> Vec<&str> {
+        let ret = match self.idx.get(word) {
+            Ok(i) => i,
+            Err(i) => i,
+        } as i32;
+        let start = (ret + off) as usize;
+
+        let mut end = start + length;
+        if end > self.idx.len() {
+            end = self.idx.len();
+        }
+        //(start..end).map(|x| self.idx.list[x].word.as_str()).collect()
+        let mut ret: Vec<&str> = Vec::with_capacity(length);
+        for x in start..end {
+            ret.push(&self.idx.list[x].word);
+        }
+        ret
+    }
+
+    pub fn lookup(&mut self, word: &str) -> Result<Vec<u8>, DictError> {
+        match self.idx.get(word) {
+            Ok(i) => {
+                let e = &(self.idx.list[i]);
+                self.dict.read(e.offset, e.length as usize)
+            },
+            _ => Err(DictError::My(format!("not found"))),
+        }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Translation {
-    pub info: Ifo,
-    pub results: Vec<TranslationItem>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TranslationItem {
-    pub mode: char,
-    pub body: String,
-}

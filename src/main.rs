@@ -4,7 +4,7 @@ pub mod idx;
 pub mod ifo;
 pub mod result;
 
-use std::{env, fs, path, str};
+use std::{env, fs, path};
 
 pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
@@ -39,20 +39,6 @@ impl StarDict {
         }
         items
     }
-
-    pub fn search(&mut self, word: &str) -> Vec<dictionary::Translation> {
-        let mut items = Vec::new();
-        for it in &mut self.directories {
-            match it.search(word) {
-                Ok(v) => items.push(dictionary::Translation {
-                    info: it.ifo.clone(),
-                    results: v,
-                }),
-                Err(e) => eprintln!("search {} in {} failed: {:?}", word, it.ifo.name, e),
-            }
-        }
-        items
-    }
 }
 fn main() {
     let difo = ifo::Ifo::open(path::PathBuf::from("c.ifo"));
@@ -74,7 +60,10 @@ fn main() {
                 let w = ddict.read(x.offset, x.length as usize).unwrap();
                 println!("the description={}", String::from_utf8(w).unwrap());
             }
-            Err(e) => println!("error: {:?}", e),
+            Err(e) => {
+                println!("error: {:?}", e);
+                didx.search(&arg).unwrap().for_each(|x|println!("the reg word={:?}", &(didx.list[x].word)));
+            }
         }
     }
 }

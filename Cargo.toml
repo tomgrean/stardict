@@ -7,3 +7,4 @@ homepage = "https://github.com/saturn-xiv/stardict"
 license = "MIT"
 
 [dependencies]
+regex = "1"

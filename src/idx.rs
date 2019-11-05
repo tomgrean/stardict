@@ -1,7 +1,11 @@
+extern crate regex;
+
 use std::cmp::Ordering;
 use std::fs;
 use std::io::Read;
 use std::path;
+use self::regex::Error;
+use self::regex::Regex;
 
 use super::result::DictError;
 
@@ -16,6 +20,11 @@ pub struct Idx {
     pub list: Vec<IdxData>,
 }
 
+pub struct IdxIter<'a> {
+    cur: usize,
+    data: &'a Idx,
+    matcher: Regex,
+}
 #[derive(Debug)]
 enum ParseState {
     Word,
@@ -89,20 +98,17 @@ impl Idx {
         //con.result.iter().for_each(|x| println!("word = {}",x.word));
         Ok(Idx { list: con.result })
     }
-    pub fn get(&self, word: &str) -> Result<usize, DictError> {
-        if let Ok(i) = self
-            .list
-            .binary_search_by(|e| Idx::dict_cmp(&(e.word), word, false))
-        {
-            Ok(i)
-        } else if let Ok(i) = self
-            .list
-            .binary_search_by(|e| Idx::dict_cmp(&(e.word), word, true))
-        {
-            Ok(i)
-        } else {
-            Err(DictError::My(String::from("not found")))
+    // the result Err(usize) is used for neighborhood hint.
+    pub fn get(&self, word: &str) -> Result<usize, usize> {
+        match self.list.binary_search_by(|e| Idx::dict_cmp(&(e.word), word, false)) {
+            Err(_) => self.list.binary_search_by(|e| Idx::dict_cmp(&(e.word), word, true)),
+            x => x,
         }
+    }
+    // search by regular expression
+    pub fn search(&self, fuzzy: &str) -> Result<IdxIter, Error> {
+        let reg = Regex::new(fuzzy)?;
+        Ok(IdxIter {cur:0, data:self, matcher:reg})
     }
     pub fn len(&self) -> usize {
         self.list.len()
@@ -154,5 +160,20 @@ impl Idx {
         } else {
             Ordering::Equal
         }
+    }
+}
+impl<'a> Iterator for IdxIter<'a> {
+    type Item = usize;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.cur += 1;
+        if self.cur < self.data.list.len() {
+            for v in &(self.data.list[self.cur..]) {
+                if self.matcher.is_match(v.word.as_str()) {
+                    return Some(self.cur);
+                }
+                self.cur += 1;
+            }
+        }
+        None
     }
 }
