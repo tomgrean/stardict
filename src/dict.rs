@@ -9,7 +9,7 @@ pub struct Dict {
 }
 
 impl Dict {
-    pub fn open(file: path::PathBuf) -> Result<Dict, DictError> {
+    pub fn open(file: &path::Path) -> Result<Dict, DictError> {
         let f = File::open(file)?;
         Ok(Dict { dictf: f })
     }

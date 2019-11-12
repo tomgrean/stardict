@@ -1,3 +1,4 @@
+use std::fs;
 use std::path;
 
 use super::dict::Dict;
@@ -12,14 +13,21 @@ pub struct Dictionary {
 }
 
 impl Dictionary {
-    pub fn new(root: path::PathBuf) -> Result<Dictionary, DictError> {
-        if let Some(name) = root.file_name() {
-            if let Some(name) = name.to_str() {
-                return Ok(Dictionary {
-                    idx: Idx::open(root.join(format!("{}.idx", name)), false)?,
-                    ifo: Ifo::open(root.join(format!("{}.ifo", name)))?,
-                    dict: Dict::open(root.join(format!("{}.dict", name)))?,
-                });
+    pub fn new(root: &path::Path) -> Result<Dictionary, DictError> {
+        for it in fs::read_dir(root)? {
+            let it = it?.path();
+            if it.is_file() {
+                if let Some(ext) = it.extension() {
+                    if let Some("ifo") = ext.to_str() {
+                        let ifo = Ifo::open(&it)?;
+                        let mut file = it.to_path_buf();
+                        file.set_extension("idx");
+                        let idx = Idx::open(&file, ifo.idxoffsetbits == 64)?;
+                        file.set_extension("dict");
+                        let dict = Dict::open(&file)?;
+                        return Ok(Dictionary { ifo, idx, dict });
+                    }
+                }
             }
         }
         Err(DictError::My(format!(
@@ -28,23 +36,24 @@ impl Dictionary {
         )))
     }
 
-    pub fn neighbors(&self, word: &str, off: i32, length: usize) -> Vec<&str> {
+    pub fn neighbors(&self, word: &str, off: i32, length: usize) -> Option<Vec<&str>> {
         let ret = match self.idx.get(word) {
             Ok(i) => i,
             Err(i) => i,
         } as i32;
         let start = (ret + off) as usize;
 
-        let mut end = start + length;
-        if end > self.idx.len() {
-            end = self.idx.len();
+        if start < self.idx.list.len() {
+            Some(
+                self.idx.list[start..]
+                    .iter()
+                    .take(length)
+                    .map(|x| x.word.as_str())
+                    .collect(),
+            )
+        } else {
+            None
         }
-        //(start..end).map(|x| self.idx.list[x].word.as_str()).collect()
-        let mut ret: Vec<&str> = Vec::with_capacity(length);
-        for x in start..end {
-            ret.push(&self.idx.list[x].word);
-        }
-        ret
     }
 
     pub fn lookup(&mut self, word: &str) -> Result<Vec<u8>, DictError> {
@@ -52,9 +61,8 @@ impl Dictionary {
             Ok(i) => {
                 let e = &(self.idx.list[i]);
                 self.dict.read(e.offset, e.length as usize)
-            },
+            }
             _ => Err(DictError::My(format!("not found"))),
         }
     }
 }
-

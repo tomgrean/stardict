@@ -79,7 +79,7 @@ impl Parser {
     }
 }
 impl Idx {
-    pub fn open(file: path::PathBuf, off_is_u64: bool) -> Result<Idx, DictError> {
+    pub fn open(file: &path::Path, off_is_u64: bool) -> Result<Idx, DictError> {
         let mut file_con: Vec<u8>;
         {
             let mut idx_file = fs::File::open(file)?;
@@ -114,7 +114,7 @@ impl Idx {
         self.list.len()
     }
 
-    fn dict_cmp(w1: &str, w2: &str, ignore_case: bool) -> Ordering {
+    pub fn dict_cmp(w1: &str, w2: &str, ignore_case: bool) -> Ordering {
         let w1len = w1.len();
         let w2len = w2.len();
 
@@ -163,13 +163,13 @@ impl Idx {
     }
 }
 impl<'a> Iterator for IdxIter<'a> {
-    type Item = usize;
+    type Item = &'a str;
     fn next(&mut self) -> Option<Self::Item> {
         self.cur += 1;
         if self.cur < self.data.list.len() {
             for v in &(self.data.list[self.cur..]) {
                 if self.matcher.is_match(v.word.as_str()) {
-                    return Some(self.cur);
+                    return Some(v.word.as_str());
                 }
                 self.cur += 1;
             }

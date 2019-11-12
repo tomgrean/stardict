@@ -16,10 +16,12 @@ pub struct Ifo {
     pub idx_file_size: isize,
     pub word_count: isize,
     pub syn_word_count: isize,
+    pub idxoffsetbits: isize
 }
 
 impl Ifo {
-    pub fn open(file: path::PathBuf) -> Result<Ifo, DictError> {
+    pub fn open(file: &path::Path) -> Result<Ifo, DictError> {
+        //println!("ifo file = {:?}", file);
         let mut it = Ifo {
             author: String::new(),
             version: String::new(),
@@ -32,6 +34,7 @@ impl Ifo {
             idx_file_size: 0,
             word_count: 0,
             syn_word_count: 0,
+            idxoffsetbits: 32,
         };
         for line in io::BufReader::new(fs::File::open(file)?).lines() {
             let line = line?;
@@ -50,6 +53,7 @@ impl Ifo {
                     "email" => it.email = val,
                     "sametypesequence" => it.same_type_sequence = val,
                     "synwordcount" => it.syn_word_count = val.parse()?,
+                    "idxoffsetbits" => it.idxoffsetbits = val.parse()?,
                     _ => eprintln!("Ingnore line: {}", line),
                 };
             }
