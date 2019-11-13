@@ -3,20 +3,20 @@ use std::{fs, io, path};
 
 use super::result::DictError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Ifo {
     pub author: String,
-    pub version: String,
+    //pub version: String,
     pub name: String,
-    pub date: String,
+    //pub date: String,
     pub description: String,
-    pub email: String,
-    pub web_site: String,
+    //pub email: String,
+    //pub web_site: String,
     pub same_type_sequence: String,
-    pub idx_file_size: isize,
-    pub word_count: isize,
-    pub syn_word_count: isize,
-    pub idxoffsetbits: isize
+    pub idx_file_size: usize,
+    pub word_count: usize,
+    //pub syn_word_count: usize,
+    pub idxoffsetbits: usize
 }
 
 impl Ifo {
@@ -24,16 +24,16 @@ impl Ifo {
         //println!("ifo file = {:?}", file);
         let mut it = Ifo {
             author: String::new(),
-            version: String::new(),
+            //version: String::new(),
             name: String::new(),
-            date: String::new(),
+            //date: String::new(),
             description: String::new(),
-            email: String::new(),
-            web_site: String::new(),
+            //email: String::new(),
+            //web_site: String::new(),
             same_type_sequence: String::new(),
             idx_file_size: 0,
             word_count: 0,
-            syn_word_count: 0,
+            //syn_word_count: 0,
             idxoffsetbits: 32,
         };
         for line in io::BufReader::new(fs::File::open(file)?).lines() {
@@ -44,17 +44,17 @@ impl Ifo {
                 match key {
                     "author" => it.author = val,
                     "bookname" => it.name = val,
-                    "version" => it.version = val,
+                    //"version" => it.version = val,
                     "description" => it.description = val,
-                    "date" => it.date = val,
+                    //"date" => it.date = val,
                     "idxfilesize" => it.idx_file_size = val.parse()?,
                     "wordcount" => it.word_count = val.parse()?,
-                    "website" => it.web_site = val,
-                    "email" => it.email = val,
+                    //"website" => it.web_site = val,
+                    //"email" => it.email = val,
                     "sametypesequence" => it.same_type_sequence = val,
-                    "synwordcount" => it.syn_word_count = val.parse()?,
+                    //"synwordcount" => it.syn_word_count = val.parse()?,
                     "idxoffsetbits" => it.idxoffsetbits = val.parse()?,
-                    _ => eprintln!("Ingnore line: {}", line),
+                    _ => (),//eprintln!("Ingnore line: {}", line),
                 };
             }
         }

@@ -7,8 +7,8 @@ use super::ifo::Ifo;
 use super::result::DictError;
 
 pub struct Dictionary {
-    pub idx: Idx,
     pub ifo: Ifo,
+    pub idx: Idx,
     pub dict: Dict,
 }
 
@@ -22,7 +22,7 @@ impl Dictionary {
                         let ifo = Ifo::open(&it)?;
                         let mut file = it.to_path_buf();
                         file.set_extension("idx");
-                        let idx = Idx::open(&file, ifo.idxoffsetbits == 64)?;
+                        let idx = Idx::open(&file, ifo.word_count as usize, ifo.idxoffsetbits == 64)?;
                         file.set_extension("dict");
                         let dict = Dict::open(&file)?;
                         return Ok(Dictionary { ifo, idx, dict });
@@ -60,7 +60,7 @@ impl Dictionary {
         match self.idx.get(word) {
             Ok(i) => {
                 let e = &(self.idx.list[i]);
-                self.dict.read(e.offset, e.length as usize)
+                self.dict.read(e.offset as u64, e.length as usize)
             }
             _ => Err(DictError::My(format!("not found"))),
         }

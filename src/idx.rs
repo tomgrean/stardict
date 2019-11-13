@@ -12,7 +12,7 @@ use super::result::DictError;
 #[derive(Debug)]
 pub struct IdxData {
     pub word: String, //utf-8 string, len() < 256
-    pub offset: u64,  //32 or 64 for data bits, indicated from .ifo file idxoffsetbits=64.
+    pub offset: u32,  //32 or 64 for data bits, indicated from .ifo file idxoffsetbits=64.
     pub length: u32,  //u32 for data size.
 }
 #[derive(Debug)]
@@ -33,7 +33,7 @@ enum ParseState {
 }
 #[derive(Debug)]
 struct Parser {
-    offset: u64,
+    offset: u32,
     length: u32,
     off_is_u64: bool,
     word: Vec<u8>,
@@ -51,7 +51,7 @@ impl Parser {
                 }
             }
             ParseState::Offset(n) => {
-                self.offset = (self.offset << 8) | (x as u64);
+                self.offset = (self.offset << 8) | (x as u32);
                 let ck = if self.off_is_u64 { 7 } else { 3 };
                 self.state = if n < ck {
                     ParseState::Offset(n + 1)
@@ -79,7 +79,7 @@ impl Parser {
     }
 }
 impl Idx {
-    pub fn open(file: &path::Path, off_is_u64: bool) -> Result<Idx, DictError> {
+    pub fn open(file: &path::Path, count: usize, off_is_u64: bool) -> Result<Idx, DictError> {
         let mut file_con: Vec<u8>;
         {
             let mut idx_file = fs::File::open(file)?;
@@ -87,15 +87,19 @@ impl Idx {
             idx_file.read_to_end(&mut file_con)?;
         }
         let mut con = Parser {
-            offset: 0u64,
+            offset: 0,
             length: 0u32,
             off_is_u64,
             word: Vec::with_capacity(256),
             state: ParseState::Word,
-            result: Vec::new(),
+            result: Vec::with_capacity(count),
+            //result: Vec::new(),
         };
         file_con.iter().for_each(|x| con.parse(*x));
         //con.result.iter().for_each(|x| println!("word = {}",x.word));
+        if count != con.result.len() {
+            println!("warn!not equal! {} != {}", count, con.result.len());
+        }
         Ok(Idx { list: con.result })
     }
     // the result Err(usize) is used for neighborhood hint.

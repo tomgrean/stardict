@@ -164,13 +164,13 @@ fn main() {
     //let mut dict = StarDict::new(&path::PathBuf::from("/media/blank/code/stardict")).unwrap();
     println!("dict size={}", dict.directories.len());
     for d in dict.info().iter() {
-        println!("dict: {}", d.name);
+        println!("dict: wordcount:{} {}", d.word_count, d.name);
     }
     //webs
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     //let pool = web::ThreadPool::new(4);
 
-    for stream in listener.incoming()/*.take(2)*/ {
+    for stream in listener.incoming()/*.take(1)*/ {
         let stream = stream.unwrap();
 
         //pool.execute(
