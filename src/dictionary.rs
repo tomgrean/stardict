@@ -1,10 +1,13 @@
-use std::fs;
-use std::path;
+extern crate regex;
+
+use std::{fs, path, str};
 
 use super::dict::Dict;
 use super::idx::Idx;
 use super::ifo::Ifo;
 use super::result::DictError;
+use self::regex::bytes::Regex;
+use self::regex::Error;
 
 pub struct Dictionary {
     pub ifo: Ifo,
@@ -12,6 +15,15 @@ pub struct Dictionary {
     pub dict: Dict,
 }
 
+pub struct IdxIter<'a> {
+    cur: usize,
+    idx: &'a Idx,
+    matcher: Result<Regex, &'a Regex>,
+}
+pub struct DictNeighborIter<'a> {
+    cur: usize,
+    idx: &'a Idx,
+}
 impl Dictionary {
     pub fn new(root: &path::Path) -> Result<Dictionary, DictError> {
         for it in fs::read_dir(root)? {
@@ -22,7 +34,7 @@ impl Dictionary {
                         let ifo = Ifo::open(&it)?;
                         let mut file = it.to_path_buf();
                         file.set_extension("idx");
-                        let idx = Idx::open(&file, ifo.word_count as usize, ifo.idxoffsetbits == 64)?;
+                        let idx = Idx::open(&file, ifo.idx_file_size, ifo.word_count, (ifo.idxoffsetbits / 8 + 4) as u8)?;
                         file.set_extension("dict");
                         let dict = Dict::open(&file)?;
                         return Ok(Dictionary { ifo, idx, dict });
@@ -36,33 +48,65 @@ impl Dictionary {
         )))
     }
 
-    pub fn neighbors(&self, word: &str, off: i32, length: usize) -> Option<Vec<&str>> {
+    pub fn neighbors(&self, word: &[u8], off: i32) -> DictNeighborIter {
         let ret = match self.idx.get(word) {
             Ok(i) => i,
             Err(i) => i,
         } as i32;
-        let start = (ret + off) as usize;
+        let istart = ret + off;
+        let start: usize = if istart < 0 { 0 } else { istart as usize };
 
-        if start < self.idx.list.len() {
-            Some(
-                self.idx.list[start..]
-                    .iter()
-                    .take(length)
-                    .map(|x| x.word.as_str())
-                    .collect(),
-            )
-        } else {
-            None
+        DictNeighborIter { cur: start, idx: &self.idx }
+    }
+    // search by regular expression
+    pub fn search(&self, expr: &[u8]) -> Result<IdxIter, Error> {
+        match str::from_utf8(expr) {
+            Ok(e) => {
+                let reg = Regex::new(e)?;
+                Ok(IdxIter {cur:0, idx:&self.idx, matcher:Ok(reg)})
+            },
+            _ => Err(Error::Syntax(String::from("bad utf8"))),
         }
     }
+    pub fn search_regex<'a>(&'a self, reg: &'a Regex) -> IdxIter<'a> {
+        IdxIter {cur: 0, idx: &self.idx, matcher: Err(reg)}
+    }
 
-    pub fn lookup(&mut self, word: &str) -> Result<Vec<u8>, DictError> {
+    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<u8>, DictError> {
         match self.idx.get(word) {
             Ok(i) => {
-                let e = &(self.idx.list[i]);
-                self.dict.read(e.offset as u64, e.length as usize)
+                let (eoffset, elength) = self.idx.get_offset_length(i)?;
+                self.dict.read(eoffset as u64, elength as usize)
             }
-            _ => Err(DictError::My(format!("not found"))),
+            _ => Err(DictError::NotFound),
         }
+    }
+}
+impl<'a> Iterator for IdxIter<'a> {
+    type Item = &'a [u8];
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.cur < self.idx.len() {
+            let v = self.idx.get_word(self.cur);
+            self.cur += 1;
+            if let Ok(e) = v {
+                if self.matcher.as_ref().unwrap_or_else(|v|*v).is_match(e) {
+                    return Some(e);
+                }
+            }
+        }
+        None
+    }
+}
+impl<'a> Iterator for DictNeighborIter<'a> {
+    type Item = &'a [u8];
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur < self.idx.len() {
+            let v = self.idx.get_word(self.cur);
+            self.cur += 1;
+            if let Ok(e) = v {
+                return Some(e);
+            }
+        }
+        None
     }
 }

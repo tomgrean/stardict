@@ -1,3 +1,5 @@
+extern crate regex;
+
 pub mod dict;
 pub mod dictionary;
 pub mod idx;
@@ -6,10 +8,13 @@ pub mod result;
 //pub mod web;
 
 use std::{env, fs, path, str};
+use std::iter::{Iterator};
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::cmp::Ordering;
+use self::regex::bytes::Regex;
+//use self::regex::Error;
 
 pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
@@ -18,6 +23,41 @@ pub struct LookupResult<'a> {
     dictionary: &'a str,
     result: Vec<u8>,
 }
+
+pub struct WordMergeIter<'a, T: Iterator<Item=&'a [u8]>> {
+    wordit: Vec<T>,
+    cur: Vec<Option<&'a [u8]>>,
+}
+impl<'a, T: Iterator<Item=&'a [u8]>> Iterator for WordMergeIter<'a, T> {
+    type Item = &'a [u8];
+    fn next(&mut self) -> Option<Self::Item> {
+        let l = self.cur.len();
+
+        let mut x = 0usize;
+        let mut i = 1usize;
+        while i < l {
+            x = match (self.cur[x], self.cur[i]) {
+                (None, _) => i,
+                (_, None) => x,
+                (Some(a), Some(b)) => {
+                    match idx::Idx::dict_cmp(a, b, false) {
+                        Ordering::Greater => i,
+                        Ordering::Equal => {
+                            self.cur[i] = self.wordit[i].next();
+                            x
+                        },
+                        _ => x,
+                    }
+                },
+            };
+            i += 1;
+        }
+        let ret = self.cur[x];
+        self.cur[x] = self.wordit[x].next();
+        ret
+    }
+}
+
 impl StarDict {
     pub fn new(root: &path::Path) -> Result<StarDict, result::DictError> {
         let mut sort_dirs = Vec::new();
@@ -53,66 +93,32 @@ impl StarDict {
         }
         items
     }
-    fn merger(e: &str, ret: &Vec<&str>, ridx: &mut usize) -> Ordering {
-        if ret.len() <= *ridx {
-            return Ordering::Greater;
-        }
-        match idx::Idx::dict_cmp(e, ret[*ridx], false) {
-            Ordering::Greater => {
-                *ridx += 1;
-                StarDict::merger(e, ret, ridx)
-            },
-            x => x,
-        }
-    }
-    pub fn neighbors(&self, word: &str, off: i32, length: usize) -> Vec<&str> {
-        let mut ret: Vec<&str> = Vec::new();
+    pub fn neighbors(&self, word: &[u8], off: i32) -> WordMergeIter<dictionary::DictNeighborIter> {
+        let mut wordit = Vec::with_capacity(self.directories.len());
+        let mut cur = Vec::with_capacity(self.directories.len());
         for d in self.directories.iter() {
-            if let Some(n) = d.neighbors(word, off, length) {
-                if ret.len() > 0 {
-                    let mut ridx = 0usize;
-                    for e in n.iter() {
-                        match StarDict::merger(e, &mut ret, &mut ridx) {
-                            Ordering::Less => ret.insert(ridx, e),
-                            Ordering::Greater => ret.push(e),
-                            _ => (),
-                        }
-                    }
-                } else if n.len() > 0 {
-                    ret.extend(n);
-                }
-            }
+            let mut x = d.neighbors(word, off);
+            cur.push(x.next());
+            wordit.push(x);
         }
-        ret.truncate(length);
-        ret
+
+        WordMergeIter { wordit, cur }
     }
-    pub fn search(&self, fuzzy: &str, length: usize) -> Vec<&str> {
-        let mut ret: Vec<&str> = Vec::new();
+    pub fn search<'a>(&'a self, reg: &'a Regex) -> WordMergeIter<'a, dictionary::IdxIter> {
+        let mut wordit = Vec::with_capacity(self.directories.len());
+        let mut cur = Vec::with_capacity(self.directories.len());
         for d in self.directories.iter() {
-            if let Ok(n) = d.idx.search(fuzzy) {
-                if ret.len() > 0 {
-                    let mut ridx = 0usize;
-                    for e in n {
-                        match StarDict::merger(e, &mut ret, &mut ridx) {
-                            Ordering::Less => ret.insert(ridx, e),
-                            Ordering::Greater => ret.push(e),
-                            _ => (),
-                        }
-                        if ret.len() >= length {
-                            break;
-                        }
-                    }
-                } else {
-                    ret.extend(n);
-                }
-                if ret.len() >= length {
-                    break;
-                }
-            }
+            println!("in for {}", d.ifo.name.as_str());
+            let mut x = d.search_regex(reg);
+            println!("created inner iter");
+            cur.push(x.next());
+            println!("created 1st value");
+            wordit.push(x);
         }
-        ret
+
+        WordMergeIter { wordit, cur }
     }
-    pub fn lookup(&mut self, word: &str) -> Result<Vec<LookupResult>, result::DictError> {
+    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<LookupResult>, result::DictError> {
         let mut ret: Vec<LookupResult> = Vec::new();
         for d in self.directories.iter_mut() {
             match d.lookup(word) {
@@ -220,13 +226,9 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict) {
         println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
         //let contents = fs::read_to_string(filename).unwrap();
         //let response = format!("{}\r\n{}", status_line, contents);
-        let word = match str::from_utf8(&surl.word) {
-            Ok(w) => w,
-            _ => "",
-        };
-        if word.len() > 0 {
+        if surl.word.len() > 0 {
             if surl.path[0] == b'w' {//word lookup
-                match dict.lookup(word) {
+                match dict.lookup(&surl.word) {
                     Ok(x) => x.iter().for_each(|e| {
                         content.extend(b"<li>");
                         content.extend(e.dictionary.as_bytes());
@@ -236,16 +238,24 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict) {
                     Err(e) => println!("err: {:?}", e),
                 }
             } else if surl.path[0] == b'n' {//neighbor words reference
-                for s in dict.neighbors(word, 0, 10).iter() {
+                for s in dict.neighbors(&surl.word, 0).take(10) {
                     content.extend(b"<li>");
-                    content.extend(s.as_bytes());
+                    content.extend(s);
                     content.extend(b"</li>");
                 }
             } else if surl.path[0] == b's' {//search with regex
-                for s in dict.search(word, 20).iter() {
-                    content.extend(b"<li>");
-                    content.extend(s.as_bytes());
-                    content.extend(b"</li>");
+                match str::from_utf8(&surl.word) {
+                    Ok(x) => {
+                        match Regex::new(x) {
+                            Ok(v) => dict.search(&v).for_each(|e| {
+                                content.extend(b"<li>");
+                                content.extend(e);
+                                content.extend(b"</li>");
+                            }),
+                            Err(e) => println!("err: {:?}", e),
+                        }
+                    },
+                    Err(e) => println!("err: {:?}", e),
                 }
             }
         }

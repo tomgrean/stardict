@@ -6,6 +6,7 @@ pub enum DictError {
     Utf8(str::Utf8Error),
     Parse(num::ParseIntError),
     My(String),
+    NotFound,
 }
 
 impl From<io::Error> for DictError {
@@ -30,6 +31,7 @@ impl fmt::Display for DictError {
             DictError::Utf8(err) => write!(f, "{}", err),
             DictError::Parse(err) => write!(f, "{}", err),
             DictError::My(msg) => write!(f, "{}", msg),
+            DictError::NotFound => write!(f, "not found"),
         }
     }
 }
