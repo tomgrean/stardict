@@ -5,6 +5,7 @@ pub mod dictionary;
 pub mod idx;
 pub mod ifo;
 pub mod result;
+pub mod reformat;
 //pub mod web;
 
 use std::{env, fs, path, str};
@@ -20,7 +21,7 @@ pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
 }
 pub struct LookupResult<'a> {
-    dictionary: &'a str,
+    dictionary: &'a ifo::Ifo,
     result: Vec<u8>,
 }
 
@@ -123,10 +124,11 @@ impl StarDict {
         for d in self.directories.iter_mut() {
             match d.lookup(word) {
                 Ok(result) => ret.push(LookupResult {
-                    dictionary: d.ifo.name.as_str(),
+                    dictionary: &d.ifo,
                     result,
                 }),
-                Err(x) => println!("dict {} look err:{:?}", d.ifo.name, x),
+                //Err(x) => println!("dict {} look err:{:?}", d.ifo.name, x),
+                _ => (),
             }
         }
         Ok(ret)
@@ -167,7 +169,6 @@ fn main() {
     }
 
     let mut dict = StarDict::new(&path::PathBuf::from("/usr/share/stardict/dic")).unwrap();
-    //let mut dict = StarDict::new(&path::PathBuf::from("/media/blank/code/stardict")).unwrap();
     println!("dict size={}", dict.directories.len());
     for d in dict.info().iter() {
         println!("dict: wordcount:{} {}", d.word_count, d.name);
@@ -176,17 +177,19 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     //let pool = web::ThreadPool::new(4);
 
+    let cr = reformat::ContentReformat::load_from_file(&path::PathBuf::from("/usr/share/stardict/dic/format.conf"));
+
     for stream in listener.incoming()/*.take(1)*/ {
         let stream = stream.unwrap();
 
         //pool.execute(
-            handle_connection(stream, &mut dict);
+            handle_connection(stream, &mut dict, &cr);
         //);
     }
 
     println!("Shutting down.");
 }
-fn handle_connection(mut stream: TcpStream, dict: &mut StarDict) {
+fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::ContentReformat) {
     let mut buffer = [0u8; 512];
     stream.read(&mut buffer).unwrap();
 
@@ -194,9 +197,9 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict) {
 
     //("HTTP/1.0 200 OK\r\nConnection: close\r\n", "index.html");
     let mut content:Vec<u8> = Vec::new();
+    let mut surl = StardictUrl::new();
 
     if buffer.starts_with(get) {
-        let mut surl = StardictUrl::new();
         let mut state = 0i16;//>=0 path, -1 w, -2 p0w, -3 p1w
         let mut w = 0u8;
         buffer[5..].iter().take_while(|c| **c != b' ').for_each(|c|{
@@ -226,31 +229,32 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict) {
         println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
         //let contents = fs::read_to_string(filename).unwrap();
         //let response = format!("{}\r\n{}", status_line, contents);
+    //let content = cr.replace_all(&content, );
         if surl.word.len() > 0 {
             if surl.path[0] == b'w' {//word lookup
                 match dict.lookup(&surl.word) {
                     Ok(x) => x.iter().for_each(|e| {
                         content.extend(b"<li>");
-                        content.extend(e.dictionary.as_bytes());
+                        content.extend(e.dictionary.name.as_bytes());
                         content.extend(b"</li>");
-                        content.extend(&e.result);
+                        for (a, b) in e.dictionary.same_type_sequence.as_bytes().iter().zip(e.result.split(|c| *c == 0)) {
+                            content.extend(&cr.replace_all(*a, b));
+                        }
                     }),
                     Err(e) => println!("err: {:?}", e),
                 }
             } else if surl.path[0] == b'n' {//neighbor words reference
                 for s in dict.neighbors(&surl.word, 0).take(10) {
-                    content.extend(b"<li>");
                     content.extend(s);
-                    content.extend(b"</li>");
+                    content.extend(b"\n");
                 }
             } else if surl.path[0] == b's' {//search with regex
                 match str::from_utf8(&surl.word) {
                     Ok(x) => {
                         match Regex::new(x) {
                             Ok(v) => dict.search(&v).for_each(|e| {
-                                content.extend(b"<li>");
                                 content.extend(e);
-                                content.extend(b"</li>");
+                                content.extend(b"\n");
                             }),
                             Err(e) => println!("err: {:?}", e),
                         }
@@ -262,13 +266,19 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict) {
     }
 
     if content.len() > 0 {
-        stream.write(b"HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: ").unwrap();
+        stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ").unwrap();
+        if surl.path[0] == b'w' {
+            stream.write(b"text/html").unwrap();
+        } else {
+            stream.write(b"text/plain").unwrap();
+        }
+        stream.write(b"\r\nContent-Length: ").unwrap();
         stream.write(content.len().to_string().as_bytes()).unwrap();
-        stream.write(b"\r\n\r\n").unwrap();
+        stream.write(b"\r\nConnection: close\r\n\r\n").unwrap();
         stream.write(&content).unwrap();
         stream.flush().unwrap();
     } else {
-        stream.write(b"HTTP/1.1 404 NOT FOUND\r\n\r\nnot found").unwrap();
+        stream.write(b"HTTP/1.0 404 NOT FOUND\r\n\r\nnot found").unwrap();
         stream.flush().unwrap();
     }
 }

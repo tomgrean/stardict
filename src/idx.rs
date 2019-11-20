@@ -66,7 +66,7 @@ impl Idx {
         if count != con.result.len() {
             return Err(DictError::My(format!("not equal! {} != {}", count, con.result.len())));
         }
-        println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
+        //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
         Ok(Idx { content:file_con, index: con.result })
     }
     pub fn len(&self) -> usize {
