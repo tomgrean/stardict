@@ -27,7 +27,7 @@ impl ContentReformat {
             _ => c
         }
     }
-    pub fn load_from_file(config: &path::Path) -> ContentReformat {
+    pub fn from_config_file(config: &path::Path) -> ContentReformat {
         let file;
         match fs::File::open(config) {
             Ok(f) => file = f,

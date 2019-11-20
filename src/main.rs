@@ -135,7 +135,7 @@ impl StarDict {
     }
 }
 struct StardictUrl {
-    path: [u8;4],
+    path: [u8; 4usize],
     word: Vec<u8>,
 }
 impl StardictUrl {
@@ -177,7 +177,7 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     //let pool = web::ThreadPool::new(4);
 
-    let cr = reformat::ContentReformat::load_from_file(&path::PathBuf::from("/usr/share/stardict/dic/format.conf"));
+    let cr = reformat::ContentReformat::from_config_file(&path::PathBuf::from("/usr/share/stardict/dic/rformat.conf"));
 
     for stream in listener.incoming()/*.take(1)*/ {
         let stream = stream.unwrap();
@@ -226,21 +226,38 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
             }
         });
 
-        println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
-        //let contents = fs::read_to_string(filename).unwrap();
-        //let response = format!("{}\r\n{}", status_line, contents);
-    //let content = cr.replace_all(&content, );
+        //println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
         if surl.word.len() > 0 {
             if surl.path[0] == b'w' {//word lookup
                 match dict.lookup(&surl.word) {
-                    Ok(x) => x.iter().for_each(|e| {
-                        content.extend(b"<li>");
-                        content.extend(e.dictionary.name.as_bytes());
-                        content.extend(b"</li>");
-                        for (a, b) in e.dictionary.same_type_sequence.as_bytes().iter().zip(e.result.split(|c| *c == 0)) {
-                            content.extend(&cr.replace_all(*a, b));
+                    Ok(x) => {
+                        content.extend(b"<ol>");
+                        for (i, e) in x.iter().enumerate() {
+                            content.extend(b"<li><a href='#word_");
+                            content.extend(i.to_string().as_bytes());
+                            content.extend(b"'>");
+                            content.extend(&surl.word);
+                            content.extend(b" : ");
+                            content.extend(e.dictionary.name.as_bytes());
+                            content.extend(b"</a></li>");
                         }
-                    }),
+                        content.extend(b"</ol>\n");
+
+                        for (i, e) in x.iter().enumerate() {
+                            content.extend(b"<div id='word_");
+                            content.extend(i.to_string().as_bytes());
+                            content.extend(b"' class='res_word'>");
+                            content.extend(e.dictionary.name.as_bytes());
+                            content.extend(b" (");
+                            content.extend(&surl.word);
+                            content.extend(b") </div><div class='res_definition'>".iter());
+                            for (a, b) in e.dictionary.same_type_sequence.as_bytes().iter().zip(e.result.split(|c| *c == 0)) {
+                                content.extend(&cr.replace_all(*a, b));
+                            }
+                            content.extend(b"</div>\n");
+                        }
+
+                    },
                     Err(e) => println!("err: {:?}", e),
                 }
             } else if surl.path[0] == b'n' {//neighbor words reference
@@ -261,16 +278,29 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                     },
                     Err(e) => println!("err: {:?}", e),
                 }
+            } else if surl.path[0] == b'h' {
+                //html js css page.
+                if let Ok(fname) = str::from_utf8(&surl.word) {
+                    let mut pfile = path::PathBuf::from("/usr/share/stardict/dic/rhtm");
+                    pfile.push(fname);
+                    if let Ok(mut f) = fs::File::open(pfile) {
+                        if f.read_to_end(&mut content).is_err() {
+                            content.clear();
+                        }
+                    }
+                }
             }
+        } else {
+            content.extend(HOME_PAGE.as_bytes());
         }
     }
 
     if content.len() > 0 {
         stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ").unwrap();
-        if surl.path[0] == b'w' {
-            stream.write(b"text/html").unwrap();
-        } else {
+        if surl.path[0] == b'n' || surl.path[0] == b's' {
             stream.write(b"text/plain").unwrap();
+        } else {
+            stream.write(b"text/html").unwrap();
         }
         stream.write(b"\r\nContent-Length: ").unwrap();
         stream.write(content.len().to_string().as_bytes()).unwrap();
@@ -282,3 +312,42 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
         stream.flush().unwrap();
     }
 }
+const HOME_PAGE: &'static str = r"<html><head>
+<meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />
+<title>Star Dictionary</title>
+<style>
+.res_definition{
+ table-layout: fixed;
+ border-left: thin dashed black;
+ border-right: thin dashed black;
+ padding: 5px;
+}
+.res_word{
+ table-layout: fixed;
+ border: thin solid black;
+ padding: 5px;
+}
+span{
+ color:green;
+}
+a{
+ color:blue;
+ text-decoration:underline;
+ cursor:pointer;
+}
+blockquote{
+ margin:0em 0em 0em 1em;
+ padding:0em 0em 0em 0em;
+}
+</style>
+<link href='html/jquery-ui.css' rel='stylesheet'>
+<script src='html/jquery.js'></script>
+<script src='html/jquery-ui.js'></script>
+<script src='html/autohint.js'></script>
+</head><body>
+<form id='qwFORM' action='/' method='GET'>
+<input id='qwt' type='text' name='w' class='ui-autocomplete-input' placeholder='input word' required='required' value=''/>
+<input type='submit' value='='/> &nbsp;<input type='button' id='backwardbtn' value='<'/> <input type='button' id='forwardbtn' value='>'/>
+</form><hr/>
+<div id='dict_content'></div></body></html>";
+
