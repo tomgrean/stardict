@@ -5,6 +5,7 @@ $(document).ready(function() {
 	var dict_content = $("#dict_content");
 	var qword = $("#qwt");
 	var formobj = $("#qwFORM");
+	var chkreg = document.getElementById("chkreg");
 	qword.autocomplete({
 		//autoFocus:true,
 		source:function(req, res) {
@@ -55,8 +56,13 @@ $(document).ready(function() {
 	}
 	formobj.on("submit", function(e) {
 		e.preventDefault();
+		var lookup = "/w/";
+		if (chkreg.checked) {
+			lookup = "/s/";
+			chkreg.checked = false;
+		}
 		$.ajax({
-			url:"/w/"+qword.val(),
+			url:lookup+qword.val(),
 			type:"GET",
 			dataType:"html",
 			success:function(data) {

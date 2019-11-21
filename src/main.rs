@@ -109,11 +109,11 @@ impl StarDict {
         let mut wordit = Vec::with_capacity(self.directories.len());
         let mut cur = Vec::with_capacity(self.directories.len());
         for d in self.directories.iter() {
-            println!("in for {}", d.ifo.name.as_str());
+            //println!("in for {}", d.ifo.name.as_str());
             let mut x = d.search_regex(reg);
-            println!("created inner iter");
+            //println!("created inner iter");
             cur.push(x.next());
-            println!("created 1st value");
+            //println!("created 1st value");
             wordit.push(x);
         }
 
@@ -269,10 +269,15 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                 match str::from_utf8(&surl.word) {
                     Ok(x) => {
                         match Regex::new(x) {
-                            Ok(v) => dict.search(&v).for_each(|e| {
-                                content.extend(e);
-                                content.extend(b"\n");
-                            }),
+                            Ok(v) => {
+                                content.extend(b"/~/:<ol>");
+                                dict.search(&v).take(500).for_each(|e| {
+                                    content.extend(b"<li><a>");
+                                    content.extend(e);
+                                    content.extend(b"</a></li>\n");
+                                });
+                                content.extend(b"</ol>");
+                            },
                             Err(e) => println!("err: {:?}", e),
                         }
                     },
@@ -297,7 +302,7 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
 
     if content.len() > 0 {
         stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ").unwrap();
-        if surl.path[0] == b'n' || surl.path[0] == b's' {
+        if surl.path[0] == b'n' {
             stream.write(b"text/plain").unwrap();
         } else {
             stream.write(b"text/html").unwrap();
@@ -346,7 +351,7 @@ blockquote{
 <script src='html/autohint.js'></script>
 </head><body>
 <form id='qwFORM' action='/' method='GET'>
-<input id='qwt' type='text' name='w' class='ui-autocomplete-input' placeholder='input word' required='required' value=''/>
+<input id='qwt' type='text' name='w' class='ui-autocomplete-input' placeholder='input word' required='required' value=''/>/<input id='chkreg' type='checkbox'/>/
 <input type='submit' value='='/> &nbsp;<input type='button' id='backwardbtn' value='<'/> <input type='button' id='forwardbtn' value='>'/>
 </form><hr/>
 <div id='dict_content'></div></body></html>";

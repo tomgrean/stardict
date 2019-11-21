@@ -57,7 +57,7 @@ impl ContentReformat {
                     let mut i = 0usize;
                     let mut esc = false;
                     while i < v.len() {
-                        if op_idx == 0 && (v[i] == b'=' || v[i] == b'~') && !esc {
+                        if op_idx == 0 && (v[i] == b'=' || v[i] == b'~' || v[i] == b'@') && !esc {
                             op_idx = nv.len();
                         }
                         if !esc && v[i] == b'\\' {
@@ -75,7 +75,7 @@ impl ContentReformat {
                     }
                     nv
                 } else {
-                    op_idx = v.iter().position(|&a| a == b'=' || a == b'~').unwrap_or(0);
+                    op_idx = v.iter().position(|&a| a == b'=' || a == b'~' || a = b'@').unwrap_or(0);
                     v
                 };
 
@@ -93,6 +93,7 @@ impl ContentReformat {
     pub fn replace_all(&self, dict_format: u8, haystack: &[u8]) -> Vec<u8> {
         let mut from = Vec::new();
         let mut to = Vec::new();
+        let mut buffer: Vec<u8> = Vec::new();
 
         let mut hay = Cow::from(haystack);
         if let Some(x) = self.repl.get(&dict_format) {
@@ -102,6 +103,12 @@ impl ContentReformat {
                 if v.line[v.op_idx] == b'=' {
                     from.push(&v.line[..v.op_idx]);
                     to.push(&v.line[(v.op_idx+1)..]);
+                } else if v.line[v.op_idx] == b'@' {
+                    from.push(&v.line[..v.op_idx]);
+                    for v.line[(v.op_idx+1)..].split(|x|*x == b'@') {
+                    buffer.push();
+                    }
+                    to.push(&buffer.last());
                 } else if v.line[v.op_idx] == b'~' {
                     let re = Regex::new(std::str::from_utf8(&v.line[..v.op_idx]).unwrap()).unwrap();
                     match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {
