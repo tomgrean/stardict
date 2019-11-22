@@ -94,14 +94,14 @@ impl ContentReformat {
         let mut from = Vec::new();
         let mut to = Vec::new();
 
-        let mut hay = Cow::from(haystack);
+        let mut hay = Cow::Borrowed(haystack);
         if let Some(x) = self.repl.get(&dict_format) {
             from.reserve(x.len());
             to.reserve(x.len());
             for v in x.iter() {
                 if v.line[v.op_idx] == b'=' {
                     from.push(&v.line[..v.op_idx]);
-                    to.push(Cow::from(&v.line[(v.op_idx+1)..]));
+                    to.push(Cow::Borrowed(&v.line[(v.op_idx+1)..]));
                 } else if v.line[v.op_idx] == b'@' {
                     from.push(&v.line[..v.op_idx]);
                     let mut not_first = false;
@@ -123,11 +123,11 @@ impl ContentReformat {
                             bufe.extend(s);
                         }
                     }
-                    to.push(Cow::from(bufe));
+                    to.push(Cow::Owned(bufe));
                 } else if v.line[v.op_idx] == b'~' {
                     let re = Regex::new(std::str::from_utf8(&v.line[..v.op_idx]).unwrap()).unwrap();
                     match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {
-                        Cow::Owned(o) => hay = Cow::from(o),
+                        Cow::Owned(o) => hay = Cow::Owned(o),
                         _ => (),
                     }
                 }
