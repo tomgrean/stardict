@@ -16,6 +16,7 @@ pub struct Replacer {
 
 pub struct ContentReformat {
     repl: HashMap<u8, Vec<Replacer>>,
+    regex_cache: HashMap<(u8,usize), Regex>,
 }
 
 impl ContentReformat {
@@ -33,7 +34,7 @@ impl ContentReformat {
             Ok(f) => file = f,
             Err(e) => {
                 println!("open config failed:{:?}", e);
-                return ContentReformat { repl: HashMap::new() };
+                return ContentReformat { repl: HashMap::new(), regex_cache: HashMap::new() };
             },
         }
         let mut repl: HashMap<u8, Vec<Replacer>> = HashMap::new();
@@ -88,9 +89,9 @@ impl ContentReformat {
                 }
             }
         }});
-        ContentReformat { repl }
+        ContentReformat { repl, regex_cache: HashMap::new() }
     }
-    pub fn replace_all(&self, dict_format: u8, dict_path: &[u8], haystack: &[u8]) -> Vec<u8> {
+    pub fn replace_all(&mut self, dict_format: u8, dict_path: &[u8], haystack: &[u8]) -> Vec<u8> {
         let mut from = Vec::new();
         let mut to = Vec::new();
 
@@ -98,7 +99,7 @@ impl ContentReformat {
         if let Some(x) = self.repl.get(&dict_format) {
             from.reserve(x.len());
             to.reserve(x.len());
-            for v in x.iter() {
+            for (hi, v) in x.iter().enumerate() {
                 if v.line[v.op_idx] == b'=' {
                     from.push(&v.line[..v.op_idx]);
                     to.push(Cow::Borrowed(&v.line[(v.op_idx+1)..]));
@@ -125,7 +126,14 @@ impl ContentReformat {
                     }
                     to.push(Cow::Owned(bufe));
                 } else if v.line[v.op_idx] == b'~' {
-                    let re = Regex::new(std::str::from_utf8(&v.line[..v.op_idx]).unwrap()).unwrap();
+                    let re: &Regex = match self.regex_cache.get(&(dict_format, hi)) {
+                        Some(r) => &r,
+                        _ => {
+                            let re = Regex::new(std::str::from_utf8(&v.line[..v.op_idx]).unwrap()).unwrap();
+                            self.regex_cache.insert((dict_format, hi), re);
+                            &self.regex_cache.get(&(dict_format, hi)).unwrap()
+                        },
+                    };
                     match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {
                         Cow::Owned(o) => hay = Cow::Owned(o),
                         _ => (),

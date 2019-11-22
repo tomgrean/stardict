@@ -177,19 +177,19 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     //let pool = web::ThreadPool::new(4);
 
-    let cr = reformat::ContentReformat::from_config_file(&path::PathBuf::from("/usr/share/stardict/dic/rformat.conf"));
+    let mut cr = reformat::ContentReformat::from_config_file(&path::PathBuf::from("/usr/share/stardict/dic/rformat.conf"));
 
     for stream in listener.incoming()/*.take(1)*/ {
         let stream = stream.unwrap();
 
         //pool.execute(
-            handle_connection(stream, &mut dict, &cr);
+            handle_connection(stream, &mut dict, &mut cr);
         //);
     }
 
     println!("Shutting down.");
 }
-fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::ContentReformat) {
+fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &mut reformat::ContentReformat) {
     let mut buffer = [0u8; 512];
     stream.read(&mut buffer).unwrap();
 
