@@ -76,7 +76,7 @@ impl StarDict {
 
         sort_dirs.sort();
         for it in sort_dirs.iter() {
-            match dictionary::Dictionary::new(&**it) {
+            match dictionary::Dictionary::new(&**it, root) {
                 Ok(d) => {
                     items.push(d);
                 }
@@ -170,9 +170,9 @@ fn main() {
 
     let mut dict = StarDict::new(&path::PathBuf::from("/usr/share/stardict/dic")).unwrap();
     println!("dict size={}", dict.directories.len());
-    for d in dict.info().iter() {
-        println!("dict: wordcount:{} {}", d.word_count, d.name);
-    }
+    //for d in dict.info().iter() {
+    //    println!("dict: wordcount:{} {}", d.word_count, d.name);
+    //}
     //webs
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     //let pool = web::ThreadPool::new(4);
@@ -228,7 +228,7 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
 
         //println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
         if surl.word.len() > 0 {
-            if surl.path[0] == b'w' {//word lookup
+            if surl.path[0] == b'W' {//word lookup
                 match dict.lookup(&surl.word) {
                     Ok(x) => {
                         content.extend(b"<ol>");
@@ -252,7 +252,7 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                             content.extend(&surl.word);
                             content.extend(b") </div><div class='res_definition'>".iter());
                             for (a, b) in e.dictionary.same_type_sequence.as_bytes().iter().zip(e.result.split(|c| *c == 0)) {
-                                content.extend(&cr.replace_all(*a, b));
+                                content.extend(&cr.replace_all(*a, e.dictionary.dict_path.as_bytes(), b));
                             }
                             content.extend(b"</div>\n");
                         }
@@ -283,10 +283,10 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                     },
                     Err(e) => println!("err: {:?}", e),
                 }
-            } else if surl.path[0] == b'h' {
-                //html js css page.
+            } else if surl.path[0] == b'r' {
+                //html js css page etc.
                 if let Ok(fname) = str::from_utf8(&surl.word) {
-                    let mut pfile = path::PathBuf::from("/usr/share/stardict/dic/rhtm");
+                    let mut pfile = path::PathBuf::from("/usr/share/stardict/dic");
                     pfile.push(fname);
                     if let Ok(mut f) = fs::File::open(pfile) {
                         if f.read_to_end(&mut content).is_err() {
@@ -294,16 +294,32 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                         }
                     }
                 }
+            } else if surl.path[0] == b'w' {
+                content.extend(HOME_PAGE.as_bytes());
             }
         } else {
             content.extend(HOME_PAGE.as_bytes());
         }
     }
 
+    fn map_by_file(f: &[u8]) -> &'static [u8] {
+        if let Some(s) = f.rsplit(|c| *c == b'.').next() {
+            match s {
+                b"js" => return b"application/javascript",
+                b"css" => return b"text/css",
+                b"jpg" => return b"image/jpeg",
+                b"png" => return b"image/png",
+                _ => (),
+            }
+        }
+        b"text/html"
+    }
     if content.len() > 0 {
         stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ").unwrap();
         if surl.path[0] == b'n' {
             stream.write(b"text/plain").unwrap();
+        } else if surl.path[0] == b'r' {
+            stream.write(map_by_file(&surl.word)).unwrap();
         } else {
             stream.write(b"text/html").unwrap();
         }
@@ -345,10 +361,10 @@ blockquote{
  padding:0em 0em 0em 0em;
 }
 </style>
-<link href='html/jquery-ui.css' rel='stylesheet'>
-<script src='html/jquery.js'></script>
-<script src='html/jquery-ui.js'></script>
-<script src='html/autohint.js'></script>
+<link href='/r/rhtm/jquery-ui.css' rel='stylesheet'>
+<script src='/r/rhtm/jquery.js'></script>
+<script src='/r/rhtm/jquery-ui.js'></script>
+<script src='/r/rhtm/autohint.js'></script>
 </head><body>
 <form id='qwFORM' action='/' method='GET'>
 <input id='qwt' type='text' name='w' class='ui-autocomplete-input' placeholder='input word' required='required' value=''/>/<input id='chkreg' type='checkbox'/>/

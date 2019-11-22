@@ -75,7 +75,7 @@ impl ContentReformat {
                     }
                     nv
                 } else {
-                    op_idx = v.iter().position(|&a| a == b'=' || a == b'~' || a = b'@').unwrap_or(0);
+                    op_idx = v.iter().position(|&a| a == b'=' || a == b'~' || a == b'@').unwrap_or(0);
                     v
                 };
 
@@ -90,10 +90,9 @@ impl ContentReformat {
         }});
         ContentReformat { repl }
     }
-    pub fn replace_all(&self, dict_format: u8, haystack: &[u8]) -> Vec<u8> {
+    pub fn replace_all(&self, dict_format: u8, dict_path: &[u8], haystack: &[u8]) -> Vec<u8> {
         let mut from = Vec::new();
         let mut to = Vec::new();
-        let mut buffer: Vec<u8> = Vec::new();
 
         let mut hay = Cow::from(haystack);
         if let Some(x) = self.repl.get(&dict_format) {
@@ -102,13 +101,29 @@ impl ContentReformat {
             for v in x.iter() {
                 if v.line[v.op_idx] == b'=' {
                     from.push(&v.line[..v.op_idx]);
-                    to.push(&v.line[(v.op_idx+1)..]);
+                    to.push(Cow::from(&v.line[(v.op_idx+1)..]));
                 } else if v.line[v.op_idx] == b'@' {
                     from.push(&v.line[..v.op_idx]);
-                    for v.line[(v.op_idx+1)..].split(|x|*x == b'@') {
-                    buffer.push();
+                    let mut not_first = false;
+                    let mut bufe = Vec::new();
+
+                    for s in v.line[(v.op_idx+1)..].split(|x|*x == b'@') {
+                        if not_first {
+                            if s.len() > 0 {
+                                match s[0] {
+                                    b'p' => bufe.extend(dict_path),
+                                    // add other variables.
+                                    _ => (),
+                                }
+                                //println!("dict path={} p={} {}", std::str::from_utf8(dict_path).unwrap(), s[0], b'p');
+                                bufe.extend(&s[1..]);
+                            }
+                        } else {
+                            not_first = true;
+                            bufe.extend(s);
+                        }
                     }
-                    to.push(&buffer.last());
+                    to.push(Cow::from(bufe));
                 } else if v.line[v.op_idx] == b'~' {
                     let re = Regex::new(std::str::from_utf8(&v.line[..v.op_idx]).unwrap()).unwrap();
                     match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {

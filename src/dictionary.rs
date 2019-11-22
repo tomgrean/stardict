@@ -25,13 +25,13 @@ pub struct DictNeighborIter<'a> {
     idx: &'a Idx,
 }
 impl Dictionary {
-    pub fn new(root: &path::Path) -> Result<Dictionary, DictError> {
+    pub fn new(root: &path::Path, base: &path::Path) -> Result<Dictionary, DictError> {
         for it in fs::read_dir(root)? {
             let it = it?.path();
             if it.is_file() {
                 if let Some(ext) = it.extension() {
                     if let Some("ifo") = ext.to_str() {
-                        let ifo = Ifo::open(&it)?;
+                        let ifo = Ifo::open(&it, base)?;
                         let mut file = it.to_path_buf();
                         file.set_extension("idx");
                         let idx = Idx::open(&file, ifo.idx_file_size, ifo.word_count, (ifo.idxoffsetbits / 8 + 4) as u8)?;

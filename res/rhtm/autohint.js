@@ -56,7 +56,7 @@ $(document).ready(function() {
 	}
 	formobj.on("submit", function(e) {
 		e.preventDefault();
-		var lookup = "/w/";
+		var lookup = "/W/";
 		if (chkreg.checked) {
 			lookup = "/s/";
 			chkreg.checked = false;
@@ -93,4 +93,9 @@ $(document).ready(function() {
 			curhistoryidx = wordhistory.length;
 		}
 	});
+	if (window.location.href.match(/w\/..*/)) {
+		var w = window.location.href.replace(/.*\/w\//, "");
+		qword.val(decodeURI(w));
+		formobj.submit();
+	}
 });

@@ -21,7 +21,7 @@ pub struct Ifo {
 }
 
 impl Ifo {
-    pub fn open(file: &path::Path) -> Result<Ifo, DictError> {
+    pub fn open(file: &path::Path, base: &path::Path) -> Result<Ifo, DictError> {
         //println!("ifo file = {:?}", file);
         let mut it = Ifo {
             author: String::new(),
@@ -32,7 +32,7 @@ impl Ifo {
             //email: String::new(),
             //web_site: String::new(),
             same_type_sequence: String::new(),
-            dict_path: file.parent().and_then(|x|x.to_str()).unwrap_or(";").to_string(),
+            dict_path: file.strip_prefix(base).ok().and_then(|p|p.parent().and_then(|x|x.to_str())).unwrap_or(";").to_string(),
             idx_file_size: 0,
             word_count: 0,
             //syn_word_count: 0,
