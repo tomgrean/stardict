@@ -1,6 +1,6 @@
 extern crate regex;
 
-use std::{fs, path, str};
+use std::{fs, path, str, borrow::Cow};
 
 use super::dict::Dict;
 use super::idx::Idx;
@@ -18,7 +18,7 @@ pub struct Dictionary {
 pub struct IdxIter<'a> {
     cur: usize,
     idx: &'a Idx,
-    matcher: Result<Regex, &'a Regex>,
+    matcher: Cow<'a, Regex>,
 }
 pub struct DictNeighborIter<'a> {
     cur: usize,
@@ -63,13 +63,13 @@ impl Dictionary {
         match str::from_utf8(expr) {
             Ok(e) => {
                 let reg = Regex::new(e)?;
-                Ok(IdxIter {cur:0, idx:&self.idx, matcher:Ok(reg)})
+                Ok(IdxIter {cur:0, idx:&self.idx, matcher:Cow::Owned(reg)})
             },
             _ => Err(Error::Syntax(String::from("bad utf8"))),
         }
     }
     pub fn search_regex<'a>(&'a self, reg: &'a Regex) -> IdxIter<'a> {
-        IdxIter {cur: 0, idx: &self.idx, matcher: Err(reg)}
+        IdxIter {cur: 0, idx: &self.idx, matcher: Cow::Borrowed(reg)}
     }
 
     pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<u8>, DictError> {
@@ -89,7 +89,7 @@ impl<'a> Iterator for IdxIter<'a> {
             let v = self.idx.get_word(self.cur);
             self.cur += 1;
             if let Ok(e) = v {
-                if self.matcher.as_ref().unwrap_or_else(|v|*v).is_match(e) {
+                if self.matcher.is_match(e) {
                     return Some(e);
                 }
             }

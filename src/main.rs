@@ -271,7 +271,7 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                         match Regex::new(x) {
                             Ok(v) => {
                                 content.extend(b"/~/:<ol>");
-                                dict.search(&v).take(500).for_each(|e| {
+                                dict.search(&v).take(10000).for_each(|e| {
                                     content.extend(b"<li><a>");
                                     content.extend(e);
                                     content.extend(b"</a></li>\n");
