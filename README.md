@@ -1,16 +1,15 @@
 # Stardict
 
-Rust implementation of reader for StarDict format.
+Rust implementation of Webserver for StarDict dictionary.
 
-## .dz file
+## .dz file can be extracted by gunzip
 
 ```bash
-pacman -S dictd
-dictzip -d *.dict.dz
+gunzip *.dict.dz
 ```
 
 ## Usage
-just run the stardict command
+just run the stardict command. many of the configurations in res/ follow my C++ version https://github.com/tomgrean/sdwv/
 
 ## Documents
 
