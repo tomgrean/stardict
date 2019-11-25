@@ -39,6 +39,7 @@ impl ContentReformat {
         }
         let mut repl: HashMap<u8, Vec<Replacer>> = HashMap::new();
         let mut dict_format = 0u8;
+        let mut regex_cache = HashMap::new();
         io::BufReader::new(file).split(b'\n').filter(|x| match x {
             Ok(v) => {
                 if v.len() > 0 && v[0] != b'#' {
@@ -82,16 +83,30 @@ impl ContentReformat {
 
                 if op_idx > 0 {
                     let obj = Replacer { line: new_vec, op_idx };
+                    let reg_cache = if obj.line[op_idx] == b'~' {
+                        //do regex cache.
+                        Some(Regex::new(std::str::from_utf8(&obj.line[..obj.op_idx]).unwrap()).unwrap())
+                    } else { None };
                     match repl.get_mut(&dict_format) {
-                        Some(r) => r.push(obj),
-                        None => {repl.insert(dict_format, vec![obj]);},
+                        Some(r) => {
+                            if let Some(c) = reg_cache {
+                                regex_cache.insert((dict_format, r.len()), c);
+                            }
+                            r.push(obj);
+                        },
+                        None => {
+                            if let Some(c) = reg_cache {
+                                regex_cache.insert((dict_format, 0), c);
+                            }
+                            repl.insert(dict_format, vec![obj]);
+                        },
                     }
                 }
             }
         }});
-        ContentReformat { repl, regex_cache: HashMap::new() }
+        ContentReformat { repl, regex_cache }
     }
-    pub fn replace_all(&mut self, dict_format: u8, dict_path: &[u8], haystack: &[u8]) -> Vec<u8> {
+    pub fn replace_all(&self, dict_format: u8, dict_path: &[u8], haystack: &[u8]) -> Vec<u8> {
         let mut from = Vec::new();
         let mut to = Vec::new();
 
@@ -126,6 +141,7 @@ impl ContentReformat {
                     }
                     to.push(Cow::Owned(bufe));
                 } else if v.line[v.op_idx] == b'~' {
+                    /*
                     let re: &Regex = match self.regex_cache.get(&(dict_format, hi)) {
                         Some(r) => &r,
                         _ => {
@@ -134,9 +150,12 @@ impl ContentReformat {
                             &self.regex_cache.get(&(dict_format, hi)).unwrap()
                         },
                     };
-                    match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {
-                        Cow::Owned(o) => hay = Cow::Owned(o),
-                        _ => (),
+                    */
+                    if let Some(re) = self.regex_cache.get(&(dict_format, hi)) {
+                        match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {
+                            Cow::Owned(o) => hay = Cow::Owned(o),
+                            _ => (),
+                        }
                     }
                 }
             }
