@@ -4,6 +4,7 @@ use std::{fs, path, str, borrow::Cow};
 
 use super::dict::Dict;
 use super::idx::Idx;
+use super::syn::Syn;
 use super::ifo::Ifo;
 use super::result::DictError;
 use self::regex::bytes::Regex;
@@ -12,7 +13,13 @@ use self::regex::Error;
 pub struct Dictionary {
     pub ifo: Ifo,
     pub idx: Idx,
+    pub syn: Option<Syn>,
     pub dict: Dict,
+}
+pub struct LookupResult<'a> {
+    pub dictionary: &'a Ifo,
+    pub word: &'a [u8],
+    pub result: Vec<u8>,
 }
 
 pub struct IdxIter<'a> {
@@ -37,7 +44,9 @@ impl Dictionary {
                         let idx = Idx::open(&file, ifo.idx_file_size, ifo.word_count, (ifo.idxoffsetbits / 8 + 4) as u8)?;
                         file.set_extension("dict");
                         let dict = Dict::open(&file)?;
-                        return Ok(Dictionary { ifo, idx, dict });
+                        file.set_extension("syn");
+                        let syn = Syn::open(&file, ifo.syn_word_count).ok();
+                        return Ok(Dictionary { ifo, idx, dict, syn });
                     }
                 }
             }
@@ -72,11 +81,21 @@ impl Dictionary {
         IdxIter {cur: 0, idx: &self.idx, matcher: Cow::Borrowed(reg)}
     }
 
-    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<u8>, DictError> {
-        match self.idx.get(word) {
+    pub fn lookup(&mut self, word: &[u8]) -> Result<LookupResult, DictError> {
+        let mut index = Err(DictError::NotFound);
+        if let Some(s) = &self.syn {
+            if let Ok(i) = s.get(word) {
+                index = s.get_offset(i);
+            }
+        }
+        match index.or_else(|_|self.idx.get(word)) {
             Ok(i) => {
                 let (eoffset, elength) = self.idx.get_offset_length(i)?;
-                self.dict.read(eoffset as u64, elength as usize)
+                Ok(LookupResult {
+                    dictionary: &self.ifo,
+                    word: self.idx.get_word(i)?,
+                    result: self.dict.read(eoffset as u64, elength as usize)?
+                })
             }
             _ => Err(DictError::NotFound),
         }

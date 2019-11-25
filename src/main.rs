@@ -3,6 +3,7 @@ extern crate regex;
 pub mod dict;
 pub mod dictionary;
 pub mod idx;
+pub mod syn;
 pub mod ifo;
 pub mod result;
 pub mod reformat;
@@ -19,10 +20,6 @@ use self::regex::bytes::Regex;
 
 pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
-}
-pub struct LookupResult<'a> {
-    dictionary: &'a ifo::Ifo,
-    result: Vec<u8>,
 }
 
 pub struct WordMergeIter<'a, T: Iterator<Item=&'a [u8]>> {
@@ -119,16 +116,11 @@ impl StarDict {
 
         WordMergeIter { wordit, cur }
     }
-    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<LookupResult>, result::DictError> {
-        let mut ret: Vec<LookupResult> = Vec::new();
+    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<dictionary::LookupResult>, result::DictError> {
+        let mut ret: Vec<dictionary::LookupResult> = Vec::with_capacity(self.directories.len());
         for d in self.directories.iter_mut() {
-            match d.lookup(word) {
-                Ok(result) => ret.push(LookupResult {
-                    dictionary: &d.ifo,
-                    result,
-                }),
-                //Err(x) => println!("dict {} look err:{:?}", d.ifo.name, x),
-                _ => (),
+            if let Ok(x) = d.lookup(word) {
+                ret.push(x);
             }
         }
         Ok(ret)
@@ -163,18 +155,45 @@ impl StardictUrl {
     }
 }
 fn main() {
+    let mut host = String::from("localhost:8888");
+    let mut _daemon = false;
+    let mut pendarg = 0u8;
+
     for arg in env::args().skip(1) {
         //parse options.
         println!("cmd args: {}", &arg);
+        let a = arg.as_bytes();
+        match pendarg {
+            b'h' => {
+                host.clear();
+                host.push_str(&arg);
+                pendarg = 0;
+            },
+            b'd' => {
+                _daemon = true;
+                pendarg = 0;
+            },
+            0 => (),
+            _ => {
+                println!("parameter: [-d] [-h host:port]");
+                return;
+            }
+        }
+        if a[0] == b'-' {
+            pendarg = a[1];
+        }
     }
+    //println!("get arg host={}, daemon={}", host, daemon);
+    //if daemon {
+    //}
 
     let mut dict = StarDict::new(&path::PathBuf::from("/usr/share/stardict/dic")).unwrap();
-    println!("dict size={}", dict.directories.len());
+    //println!("dict size={}", dict.directories.len());
     //for d in dict.info().iter() {
     //    println!("dict: wordcount:{} {}", d.word_count, d.name);
     //}
     //webs
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let listener = TcpListener::bind(&host).unwrap();
     //let pool = web::ThreadPool::new(4);
 
     let cr = reformat::ContentReformat::from_config_file(&path::PathBuf::from("/usr/share/stardict/dic/rformat.conf"));
@@ -236,7 +255,7 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                             content.extend(b"<li><a href='#word_");
                             content.extend(i.to_string().as_bytes());
                             content.extend(b"'>");
-                            content.extend(&surl.word);
+                            content.extend(e.word);
                             content.extend(b" : ");
                             content.extend(e.dictionary.name.as_bytes());
                             content.extend(b"</a></li>");
@@ -249,7 +268,7 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                             content.extend(b"' class='res_word'>");
                             content.extend(e.dictionary.name.as_bytes());
                             content.extend(b" (");
-                            content.extend(&surl.word);
+                            content.extend(e.word);
                             content.extend(b") </div><div class='res_definition'>".iter());
                             for (a, b) in e.dictionary.same_type_sequence.as_bytes().iter().zip(e.result.split(|c| *c == 0)) {
                                 content.extend(&cr.replace_all(*a, e.dictionary.dict_path.as_bytes(), b));

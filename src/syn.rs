@@ -3,14 +3,11 @@ use std::fs;
 use std::io::Read;
 use std::path;
 use super::result::DictError;
+use super::idx::Idx;
 
-// file format:
-// utf8-coded string with '\0' ending.
-// offset in dict file u32 or u64(not used for now)
-// length in dict file u32
-const OFF_LEN_BYTES: usize = 8;
+const OFF_BYTES : usize = 4;
 #[derive(Debug)]
-pub struct Idx {
+pub struct Syn {
     content: Vec<u8>,//file content
     index: Vec<u32>,//end of each word
     //off_len_bytes: u32,
@@ -21,7 +18,6 @@ enum ParseState {
     OffsetLength(u8),
 }
 struct Parser {
-    off_len_bytes_m1: u8,
     state: ParseState,
 
     off_word: u32,
@@ -37,7 +33,7 @@ impl Parser {
                 }
             }
             ParseState::OffsetLength(n) => {
-                self.state = if n < self.off_len_bytes_m1 {
+                self.state = if n < 3 {
                     ParseState::OffsetLength(n + 1)
                 } else {
                     ParseState::Word
@@ -47,16 +43,16 @@ impl Parser {
         self.off_word += 1;
     }
 }
-impl Idx {
-    pub fn open(file: &path::Path, filesize: usize, count: usize, off_len_bytes: u8) -> Result<Idx, DictError> {
+impl Syn {
+    pub fn open(file: &path::Path, count: usize) -> Result<Syn, DictError> {
         let mut file_con: Vec<u8>;
         {
-            let mut idx_file = fs::File::open(file)?;
-            file_con = Vec::with_capacity(filesize + 1);//read to end may realloc...
-            idx_file.read_to_end(&mut file_con)?;
+            let mut syn_file = fs::File::open(file)?;
+            let file_len = syn_file.metadata()?.len();
+            file_con = Vec::with_capacity(file_len as usize + 1);//read to end may realloc...
+            syn_file.read_to_end(&mut file_con)?;
         }
         let mut con = Parser {
-            off_len_bytes_m1: off_len_bytes - 1,
             state: ParseState::Word,
             off_word: 0,
             result: Vec::with_capacity(count),
@@ -67,7 +63,7 @@ impl Idx {
             return Err(DictError::My(format!("not equal! {} != {}", count, con.result.len())));
         }
         //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
-        Ok(Idx { content:file_con, index: con.result })
+        Ok(Syn { content:file_con, index: con.result })
     }
     pub fn len(&self) -> usize {
         self.index.len()
@@ -78,25 +74,22 @@ impl Idx {
             return Err(DictError::NotFound);
         }
 
-        let start = if i == 0 { 0usize } else { self.index[i - 1] as usize + OFF_LEN_BYTES + 1 };
+        let start = if i == 0 { 0usize } else { self.index[i - 1] as usize + OFF_BYTES + 1 };
         let end = self.index[i] as usize;
         Ok(&self.content[start..end])
     }
 
-    pub fn get_offset_length(&self, i: usize) -> Result<(u32, u32), DictError> {
+    pub fn get_offset(&self, i: usize) -> Result<usize, DictError> {
         //check range first
         if i >= self.index.len() {
             return Err(DictError::NotFound);
         }
 
-        let mut start = self.index[i] as usize + 1;
+        let start = self.index[i] as usize + 1;
         let mut buff = [0u8; 4];
         buff.copy_from_slice(&self.content[start..start + 4]);
         let offset = u32::from_be_bytes(buff);
-        start += 4;
-        buff.copy_from_slice(&self.content[start..start + 4]);
-        let length = u32::from_be_bytes(buff);
-        Ok((offset, length))
+        Ok(offset as usize)
     }
     // the result Err(usize) is used for neighborhood hint.
     pub fn get(&self, word: &[u8]) -> Result<usize, usize> {
@@ -122,59 +115,6 @@ impl Idx {
         // base is always in [0, size) because base <= mid.
         let cmp = Idx::dict_cmp(self.get_word(base).unwrap(), word, true);
         if cmp == Ordering::Equal { Ok(base) } else { Err(base + (cmp == Ordering::Less) as usize) }
-    }
-    pub fn dict_cmp(w1: &[u8], w2: &[u8], ignore_case: bool) -> Ordering {
-        let w1len = w1.len();
-        let w2len = w2.len();
-
-        if w1len == 0 || w2len == 0 {
-            return if w1len > 0 {
-                Ordering::Greater
-            } else if w2len > 0 {
-                Ordering::Less
-            } else {
-                Ordering::Equal
-            };
-        }
-        #[inline]
-        fn i32_to_order(x: i32) -> Ordering {
-            if x > 0 {
-                Ordering::Greater
-            } else if x < 0 {
-                Ordering::Less
-            } else {
-                Ordering::Equal
-            }
-        }
-        let mut case_eq: i32 = 0;
-        let mut ci2 = w2.iter();
-        for c1 in w1.iter() {
-            let c2: u8;
-            match ci2.next() {
-                None => return Ordering::Greater,
-                Some(c) => c2 = *c,
-            }
-            let l2 = c2.to_ascii_lowercase();
-            let l1 = c1.to_ascii_lowercase();
-            if l1 > l2 {
-                return Ordering::Greater;
-            } else if l1 < l2 {
-                return Ordering::Less;
-            }
-            if case_eq == 0 {
-                case_eq = *c1 as i32 - c2 as i32;
-                // do NOT return early.
-            }
-        }
-        if w1len > w2len {
-            Ordering::Greater
-        } else if w1len < w2len {
-            Ordering::Less
-        } else if ignore_case {
-            Ordering::Equal
-        } else {
-            i32_to_order(case_eq)
-        }
     }
 }
 

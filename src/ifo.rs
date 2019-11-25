@@ -16,7 +16,7 @@ pub struct Ifo {
     pub dict_path: String,
     pub idx_file_size: usize,
     pub word_count: usize,
-    //pub syn_word_count: usize,
+    pub syn_word_count: usize,
     pub idxoffsetbits: usize
 }
 
@@ -35,7 +35,7 @@ impl Ifo {
             dict_path: file.strip_prefix(base).ok().and_then(|p|p.parent().and_then(|x|x.to_str())).unwrap_or(";").to_string(),
             idx_file_size: 0,
             word_count: 0,
-            //syn_word_count: 0,
+            syn_word_count: 0,
             idxoffsetbits: 32,
         };
         for line in io::BufReader::new(fs::File::open(file)?).lines() {
@@ -54,7 +54,7 @@ impl Ifo {
                     //"website" => it.web_site = val,
                     //"email" => it.email = val,
                     "sametypesequence" => it.same_type_sequence = val,
-                    //"synwordcount" => it.syn_word_count = val.parse()?,
+                    "synwordcount" => it.syn_word_count = val.parse()?,
                     "idxoffsetbits" => it.idxoffsetbits = val.parse()?,
                     _ => (),//eprintln!("Ingnore line: {}", line),
                 };
