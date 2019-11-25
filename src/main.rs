@@ -120,7 +120,7 @@ impl StarDict {
         let mut ret: Vec<dictionary::LookupResult> = Vec::with_capacity(self.directories.len());
         for d in self.directories.iter_mut() {
             if let Ok(x) = d.lookup(word) {
-                ret.push(x);
+                ret.extend(x);
             }
         }
         Ok(ret)

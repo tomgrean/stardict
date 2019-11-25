@@ -81,23 +81,30 @@ impl Dictionary {
         IdxIter {cur: 0, idx: &self.idx, matcher: Cow::Borrowed(reg)}
     }
 
-    pub fn lookup(&mut self, word: &[u8]) -> Result<LookupResult, DictError> {
-        let mut index = Err(DictError::NotFound);
+    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<LookupResult>, DictError> {
+        let mut index = Err(0);
         if let Some(s) = &self.syn {
             if let Ok(i) = s.get(word) {
                 index = s.get_offset(i);
             }
         }
-        match index.or_else(|_|self.idx.get(word)) {
-            Ok(i) => {
-                let (eoffset, elength) = self.idx.get_offset_length(i)?;
-                Ok(LookupResult {
+
+        let mut ret = Vec::new();
+        let possible = [index, self.idx.get(word)];
+        for v in possible.iter() {
+            if let Ok(i) = v {
+                let (eoffset, elength) = self.idx.get_offset_length(*i)?;
+                ret.push(LookupResult {
                     dictionary: &self.ifo,
-                    word: self.idx.get_word(i)?,
+                    word: self.idx.get_word(*i)?,
                     result: self.dict.read(eoffset as u64, elength as usize)?
-                })
+                });
             }
-            _ => Err(DictError::NotFound),
+        }
+        if ret.len() > 0 {
+            Ok(ret)
+        } else {
+            Err(DictError::NotFound)
         }
     }
 }

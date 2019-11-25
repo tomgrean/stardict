@@ -79,10 +79,10 @@ impl Syn {
         Ok(&self.content[start..end])
     }
 
-    pub fn get_offset(&self, i: usize) -> Result<usize, DictError> {
+    pub fn get_offset(&self, i: usize) -> Result<usize, usize> {
         //check range first
         if i >= self.index.len() {
-            return Err(DictError::NotFound);
+            return Err(i);
         }
 
         let start = self.index[i] as usize + 1;
