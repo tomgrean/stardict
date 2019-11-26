@@ -71,7 +71,7 @@ impl Syn {
     pub fn get_word(&self, i: usize) -> Result<&[u8], DictError> {
         //check range first
         if i >= self.index.len() {
-            return Err(DictError::NotFound);
+            return Err(DictError::NotFound(i));
         }
 
         let start = if i == 0 { 0usize } else { self.index[i - 1] as usize + OFF_BYTES + 1 };

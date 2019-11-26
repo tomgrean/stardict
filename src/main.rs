@@ -30,6 +30,9 @@ impl<'a, T: Iterator<Item=&'a [u8]>> Iterator for WordMergeIter<'a, T> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
         let l = self.cur.len();
+        if l == 0 {
+            return None;
+        }
 
         let mut x = 0usize;
         let mut i = 1usize;
@@ -92,26 +95,32 @@ impl StarDict {
         items
     }
     pub fn neighbors(&self, word: &[u8], off: i32) -> WordMergeIter<dictionary::DictNeighborIter> {
-        let mut wordit = Vec::with_capacity(self.directories.len());
-        let mut cur = Vec::with_capacity(self.directories.len());
+        let mut wordit = Vec::with_capacity(2 * self.directories.len());
+        let mut cur = Vec::with_capacity(2 * self.directories.len());
         for d in self.directories.iter() {
             let mut x = d.neighbors(word, off);
+            let mut s = d.neighbors_syn(word, off);
             cur.push(x.next());
+            cur.push(s.next());
             wordit.push(x);
+            wordit.push(s);
         }
 
         WordMergeIter { wordit, cur }
     }
     pub fn search<'a>(&'a self, reg: &'a Regex) -> WordMergeIter<'a, dictionary::IdxIter> {
-        let mut wordit = Vec::with_capacity(self.directories.len());
-        let mut cur = Vec::with_capacity(self.directories.len());
+        let mut wordit = Vec::with_capacity(2 * self.directories.len());
+        let mut cur = Vec::with_capacity(2 * self.directories.len());
         for d in self.directories.iter() {
             //println!("in for {}", d.ifo.name.as_str());
             let mut x = d.search_regex(reg);
+            let mut s = d.search_syn(reg);
             //println!("created inner iter");
             cur.push(x.next());
+            cur.push(s.next());
             //println!("created 1st value");
             wordit.push(x);
+            wordit.push(s);
         }
 
         WordMergeIter { wordit, cur }
@@ -188,7 +197,7 @@ fn main() {
     //}
 
     let mut dict = StarDict::new(&path::PathBuf::from("/usr/share/stardict/dic")).unwrap();
-    //println!("dict size={}", dict.directories.len());
+    println!("dict size={}", dict.directories.len());
     //for d in dict.info().iter() {
     //    println!("dict: wordcount:{} {}", d.word_count, d.name);
     //}

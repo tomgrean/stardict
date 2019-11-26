@@ -1,15 +1,21 @@
 extern crate regex;
 
-use std::{fs, path, str, borrow::Cow};
+use std::cmp::Ordering;
+use std::{borrow::Cow, fs, path, str};
 
+use self::regex::bytes::Regex;
+use self::regex::Error;
 use super::dict::Dict;
 use super::idx::Idx;
 use super::syn::Syn;
 use super::ifo::Ifo;
 use super::result::DictError;
-use self::regex::bytes::Regex;
-use self::regex::Error;
+use super::syn::Syn;
 
+pub enum IdxRef<'a> {
+    Ref(&'a Idx),
+    SynRef(&'a Option<Syn>),
+}
 pub struct Dictionary {
     pub ifo: Ifo,
     pub idx: Idx,
@@ -24,12 +30,12 @@ pub struct LookupResult<'a> {
 
 pub struct IdxIter<'a> {
     cur: usize,
-    idx: &'a Idx,
+    idx: IdxRef<'a>,
     matcher: Cow<'a, Regex>,
 }
 pub struct DictNeighborIter<'a> {
     cur: usize,
-    idx: &'a Idx,
+    idx: IdxRef<'a>,
 }
 impl Dictionary {
     pub fn new(root: &path::Path, base: &path::Path) -> Result<Dictionary, DictError> {
@@ -41,12 +47,22 @@ impl Dictionary {
                         let ifo = Ifo::open(&it, base)?;
                         let mut file = it.to_path_buf();
                         file.set_extension("idx");
-                        let idx = Idx::open(&file, ifo.idx_file_size, ifo.word_count, (ifo.idxoffsetbits / 8 + 4) as u8)?;
+                        let idx = Idx::open(
+                            &file,
+                            ifo.idx_file_size,
+                            ifo.word_count,
+                            (ifo.idxoffsetbits / 8 + 4) as u8,
+                        )?;
                         file.set_extension("dict");
                         let dict = Dict::open(&file)?;
                         file.set_extension("syn");
                         let syn = Syn::open(&file, ifo.syn_word_count).ok();
-                        return Ok(Dictionary { ifo, idx, dict, syn });
+                        return Ok(Dictionary {
+                            ifo,
+                            idx,
+                            dict,
+                            syn,
+                        });
                     }
                 }
             }
@@ -65,58 +81,134 @@ impl Dictionary {
         let istart = ret + off;
         let start: usize = if istart < 0 { 0 } else { istart as usize };
 
-        DictNeighborIter { cur: start, idx: &self.idx }
+        DictNeighborIter {
+            cur: start,
+            idx: IdxRef::Ref(&self.idx),
+        }
     }
+
+    pub fn neighbors_syn(&self, word: &[u8], off: i32) -> DictNeighborIter {
+        let mut start: usize = usize::max_value();
+        if let Some(s) = &self.syn {
+            let ret = match s.get(word) {
+                Ok(i) => i,
+                Err(i) => i,
+            } as i32;
+            let istart = ret + off;
+            start = if istart < 0 { 0 } else { istart as usize };
+        }
+        DictNeighborIter {
+            cur: start,
+            idx: IdxRef::SynRef(&self.syn),
+        }
+    }
+
     // search by regular expression
     pub fn search(&self, expr: &[u8]) -> Result<IdxIter, Error> {
         match str::from_utf8(expr) {
             Ok(e) => {
                 let reg = Regex::new(e)?;
-                Ok(IdxIter {cur:0, idx:&self.idx, matcher:Cow::Owned(reg)})
-            },
+                Ok(IdxIter {
+                    cur: 0,
+                    idx: IdxRef::Ref(&self.idx),
+                    matcher: Cow::Owned(reg),
+                })
+            }
             _ => Err(Error::Syntax(String::from("bad utf8"))),
         }
     }
-    pub fn search_regex<'a>(&'a self, reg: &'a Regex) -> IdxIter<'a> {
-        IdxIter {cur: 0, idx: &self.idx, matcher: Cow::Borrowed(reg)}
+    pub fn search_syn<'a>(&'a self, reg: &'a Regex) -> IdxIter {
+        IdxIter {
+            cur: 0,
+            idx: IdxRef::SynRef(&self.syn),
+            matcher: Cow::Borrowed(reg),
+        }
+    }
+    pub fn search_regex<'a>(&'a self, reg: &'a Regex) -> IdxIter {
+        IdxIter {
+            cur: 0,
+            idx: IdxRef::Ref(&self.idx),
+            matcher: Cow::Borrowed(reg),
+        }
     }
 
     pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<LookupResult>, DictError> {
-        let mut index = Err(0);
+        let mut possible = Vec::with_capacity(4);
+        possible.push(self.idx.get(word));
+
         if let Some(s) = &self.syn {
             if let Ok(i) = s.get(word) {
-                index = s.get_offset(i);
+                possible.push(s.get_offset(i));
+                //check neighbors
+                let mut c = i - 1;
+                //left neighbors
+                while let Ok(w) = s.get_word(c) {
+                    if Idx::dict_cmp(word, w, true) == Ordering::Equal {
+                        possible.push(s.get_offset(c));
+                    } else {
+                        break;
+                    }
+                    c -= 1;
+                }
+                //right neighbors
+                c = i + 1;
+                while let Ok(w) = s.get_word(c) {
+                    if Idx::dict_cmp(word, w, true) == Ordering::Equal {
+                        possible.push(s.get_offset(c));
+                    } else {
+                        break;
+                    }
+                    c += 1;
+                }
             }
         }
 
         let mut ret = Vec::new();
-        let possible = [index, self.idx.get(word)];
         for v in possible.iter() {
             if let Ok(i) = v {
                 let (eoffset, elength) = self.idx.get_offset_length(*i)?;
                 ret.push(LookupResult {
                     dictionary: &self.ifo,
                     word: self.idx.get_word(*i)?,
-                    result: self.dict.read(eoffset as u64, elength as usize)?
+                    result: self.dict.read(eoffset as u64, elength as usize)?,
                 });
             }
         }
         if ret.len() > 0 {
             Ok(ret)
         } else {
-            Err(DictError::NotFound)
+            Err(DictError::NotFound(0))
         }
     }
 }
 impl<'a> Iterator for IdxIter<'a> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
-        while self.cur < self.idx.len() {
-            let v = self.idx.get_word(self.cur);
-            self.cur += 1;
-            if let Ok(e) = v {
-                if self.matcher.is_match(e) {
-                    return Some(e);
+        match &self.idx {
+            IdxRef::Ref(r) => {
+                while self.cur < r.len() {
+                    let v = r.get_word(self.cur);
+                    self.cur += 1;
+                    if let Ok(e) = v {
+                        if self.matcher.is_match(e) {
+                            return Some(e);
+                        }
+                    }
+                }
+            }
+            IdxRef::SynRef(r) => {
+                if r.is_none() {
+                    return None;
+                }
+                let s = r.as_ref().unwrap();
+                while self.cur < s.len() {
+                    let v = s.get_word(self.cur);
+                    self.cur += 1;
+                    if let Ok(e) = v {
+                        if self.matcher.is_match(e) {
+                            return Some(e);
+                        }
+                    }
                 }
             }
         }
@@ -126,11 +218,26 @@ impl<'a> Iterator for IdxIter<'a> {
 impl<'a> Iterator for DictNeighborIter<'a> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cur < self.idx.len() {
-            let v = self.idx.get_word(self.cur);
-            self.cur += 1;
-            if let Ok(e) = v {
-                return Some(e);
+        match &self.idx {
+            IdxRef::Ref(r) => {
+                if self.cur < r.len() {
+                    let v = r.get_word(self.cur);
+                    self.cur += 1;
+                    if let Ok(e) = v {
+                        return Some(e);
+                    }
+                }
+            }
+            IdxRef::SynRef(r) => {
+                if r.is_none() {
+                    return None;
+                }
+                let s = r.as_ref().unwrap();
+                if self.cur < s.len() {
+                    let v = s.get_word(self.cur);
+                    self.cur += 1;
+                    return v.ok();
+                }
             }
         }
         None
