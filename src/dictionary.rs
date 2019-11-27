@@ -10,7 +10,6 @@ use super::idx::Idx;
 use super::syn::Syn;
 use super::ifo::Ifo;
 use super::result::DictError;
-use super::syn::Syn;
 
 pub enum IdxRef<'a> {
     Ref(&'a Idx),

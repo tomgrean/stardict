@@ -106,7 +106,9 @@ impl Idx {
         if Idx::dict_cmp(self.get_word(self.index.len() - 1).unwrap(), word, true) == Ordering::Less {
             return Err(self.index.len());
         }
-
+        self.binary_search(word, false).or_else(|_|self.binary_search(word, true))
+    }
+    fn binary_search(&self, word: &[u8], ignore_case: bool) -> Result<usize, usize> {
         let mut size = self.index.len();
         let mut base = 0usize;
         while size > 1 {
@@ -115,12 +117,12 @@ impl Idx {
             // mid is always in [0, size), that means mid is >= 0 and < size.
             // mid >= 0: by definition
             // mid < size: mid = size / 2 + size / 4 + size / 8 ...
-            let cmp = Idx::dict_cmp(self.get_word(mid).unwrap(), word, true);
+            let cmp = Idx::dict_cmp(self.get_word(mid).unwrap(), word, ignore_case);
             base = if cmp == Ordering::Greater { base } else { mid };
             size -= half;
         }
         // base is always in [0, size) because base <= mid.
-        let cmp = Idx::dict_cmp(self.get_word(base).unwrap(), word, true);
+        let cmp = Idx::dict_cmp(self.get_word(base).unwrap(), word, ignore_case);
         if cmp == Ordering::Equal { Ok(base) } else { Err(base + (cmp == Ordering::Less) as usize) }
     }
     pub fn dict_cmp(w1: &[u8], w2: &[u8], ignore_case: bool) -> Ordering {
