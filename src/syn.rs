@@ -100,6 +100,7 @@ impl Syn {
             return Err(self.index.len());
         }
 
+        //do not need 2 search like idx. as all neighbors will be collected by lookup().
         let mut size = self.index.len();
         let mut base = 0usize;
         while size > 1 {

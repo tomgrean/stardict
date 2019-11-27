@@ -16,6 +16,10 @@ copy everything in `res/` to dictionary directory, eg: `cp -r res/* /usr/share/s
 and then start the command with `./stardict`.
 Open a browser and access `http://localhost:8888` or replace _localhost_ with an exact IP address.
 
+## Edit dict
+
+Beside stardict tools on the net, you can try dict extract and gendict from [mytool](https://github.com/tomgrean/tools).
+
 ## Documents
 
 -   [Format for StarDict dictionary files](https://github.com/huzheng001/stardict-3/blob/master/dict/doc/StarDictFileFormat)
