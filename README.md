@@ -2,14 +2,19 @@
 
 Rust implementation of Webserver for StarDict dictionary.
 
-## .dz file can be extracted by gunzip
+## .dz file can be extracted by gzip
 
 ```bash
-gunzip *.dict.dz
+gzip -cd XYZ.dict.dz > XYZ.dict
 ```
 
 ## Usage
-just run the stardict command. many of the configurations in res/ follow my C++ version https://github.com/tomgrean/sdwv/
+just run the stardict command. many of the configurations in `res/` follow my C++ version [sdwv](https://github.com/tomgrean/sdwv/) except using @ for variable replace and @p for dictionary path.
+
+the program default uses `/usr/share/stardict/dic/` as dictionary directory.
+copy everything in `res/` to dictionary directory, eg: `cp -r res/* /usr/share/stardict/dic/`
+and then start the command with `./stardict`.
+Open a browser and access `http://localhost:8888` or replace _localhost_ with an exact IP address.
 
 ## Documents
 
