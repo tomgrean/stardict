@@ -18,10 +18,13 @@ use std::cmp::Ordering;
 use self::regex::bytes::Regex;
 //use self::regex::Error;
 
+/// StarDict contains all dictionary found within the specified file system directory.
 pub struct StarDict {
     directories: Vec<dictionary::Dictionary>,
 }
 
+/// An iterator that merges several underlying iterators. try to dedup one duplicated
+/// word from each iterator.
 pub struct WordMergeIter<'a, T: Iterator<Item=&'a [u8]>> {
     wordit: Vec<T>,
     cur: Vec<Option<&'a [u8]>>,
@@ -60,6 +63,10 @@ impl<'a, T: Iterator<Item=&'a [u8]>> Iterator for WordMergeIter<'a, T> {
 }
 
 impl StarDict {
+    /// Create a StarDict struct from a system path. in the path,
+    /// there should be some directories. each directory contains
+    /// the dict files, like .ifo, .idx, .dict, etc.
+    /// The dictionary will be sorted by its directory name.
     pub fn new(root: &path::Path) -> Result<StarDict, result::DictError> {
         let mut sort_dirs = Vec::new();
         let mut items = Vec::new();
@@ -87,6 +94,7 @@ impl StarDict {
         }
         Ok(StarDict { directories: items })
     }
+    /// Get the Ifo struct, which is parsed from the .ifo file.
     pub fn info(&self) -> Vec<&ifo::Ifo> {
         let mut items = Vec::with_capacity(self.directories.len());
         for it in &self.directories {
@@ -94,6 +102,8 @@ impl StarDict {
         }
         items
     }
+    /// List the following neighbor words of `word`, from `off`.
+    /// If `off` is a negative number, list from before `-off`.
     pub fn neighbors(&self, word: &[u8], off: i32) -> WordMergeIter<dictionary::DictNeighborIter> {
         let mut wordit = Vec::with_capacity(2 * self.directories.len());
         let mut cur = Vec::with_capacity(2 * self.directories.len());
@@ -108,6 +118,8 @@ impl StarDict {
 
         WordMergeIter { wordit, cur }
     }
+    /// Search from all dictionaries. using the specified regular expression.
+    /// to match the beginning of a word, use `^`, the ending of a word, use `$`.
     pub fn search<'a>(&'a self, reg: &'a Regex) -> WordMergeIter<'a, dictionary::IdxIter> {
         let mut wordit = Vec::with_capacity(2 * self.directories.len());
         let mut cur = Vec::with_capacity(2 * self.directories.len());
@@ -125,6 +137,8 @@ impl StarDict {
 
         WordMergeIter { wordit, cur }
     }
+    /// Lookup the word. Find in the Idx case-sensitively, if not found then try to do
+    /// case-insensitive search. Also find all case-insensitive matching words in Syn.
     pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<dictionary::LookupResult>, result::DictError> {
         let mut ret: Vec<dictionary::LookupResult> = Vec::with_capacity(self.directories.len());
         for d in self.directories.iter_mut() {

@@ -9,11 +9,17 @@ use std::{path, fs, io};
 use self::aho_corasick::AhoCorasick;
 use self::regex::bytes::{Regex, NoExpand};
 
+/// Used to replace strings in the lookup result.
+/// see ContentReformat.
 pub struct Replacer {
     line: Vec<u8>,
     op_idx: usize,
 }
 
+/// Used to replace strings in the lookup result.
+/// read a configuration file which lists everything to replace to.
+/// can replace plain text or regular expression with replacement.
+/// Detailed configuration file format, see `from_config_file()`.
 pub struct ContentReformat {
     repl: HashMap<u8, Vec<Replacer>>,
     regex_cache: HashMap<(u8,usize), Regex>,
@@ -28,6 +34,15 @@ impl ContentReformat {
             _ => c
         }
     }
+    /// load a configuration file. create a `ContentReformat` struct.
+    /// format of the configuration file:<br>
+    /// The file is split into lines. each line makes up a single config. There are several types of line:
+    ///1. Comment. it must start with '#'.
+    ///2. Dictionary type specifier. it must start with ':', following a single char that is the same as "sametypesequence" in the .ifo file.
+    ///3. Plain string replace: x=y replaces all x to y. note there is no space in between.
+    ///4. Plain string replace with variable replacement: x@y replaces all x to y. in y all @p will
+    ///   be replaced with dictionary path.
+    ///5. Regular expression replace: x~y replaces any text that matches x, with y as Regex replacement string.
     pub fn from_config_file(config: &path::Path) -> ContentReformat {
         let file;
         match fs::File::open(config) {
@@ -106,6 +121,8 @@ impl ContentReformat {
         }});
         ContentReformat { repl, regex_cache }
     }
+    /// find all text in `haystack`, according to `dict_format` and `dict_path`, to
+    /// the replacement in `self`, using `AhoCorasick` to make the text replacement.
     pub fn replace_all(&self, dict_format: u8, dict_path: &[u8], haystack: &[u8]) -> Vec<u8> {
         let mut from = Vec::new();
         let mut to = Vec::new();

@@ -3,6 +3,7 @@ use std::{fs, io, path};
 
 use super::result::DictError;
 
+/// corresponds to .ifo file.
 #[derive(Debug)]
 pub struct Ifo {
     pub author: String,
@@ -21,6 +22,7 @@ pub struct Ifo {
 }
 
 impl Ifo {
+    /// open the .ifo file. construct a Ifo struct.
     pub fn open(file: &path::Path, base: &path::Path) -> Result<Ifo, DictError> {
         //println!("ifo file = {:?}", file);
         let mut it = Ifo {

@@ -11,32 +11,37 @@ use super::syn::Syn;
 use super::ifo::Ifo;
 use super::result::DictError;
 
+/// used to make Syn and Idx iterator work together.
 pub enum IdxRef<'a> {
     Ref(&'a Idx),
     SynRef(&'a Option<Syn>),
 }
+/// a Dictionary contains Ifo, Idx, Dict and Syn(optionally).
 pub struct Dictionary {
     pub ifo: Ifo,
     pub idx: Idx,
     pub syn: Option<Syn>,
     pub dict: Dict,
 }
+/// the successful result a lookup would return.
 pub struct LookupResult<'a> {
     pub dictionary: &'a Ifo,
     pub word: &'a [u8],
     pub result: Vec<u8>,
 }
-
+/// a regular expression search iterator.
 pub struct IdxIter<'a> {
     cur: usize,
     idx: IdxRef<'a>,
     matcher: Cow<'a, Regex>,
 }
+/// a neighborhood list iterator.
 pub struct DictNeighborIter<'a> {
     cur: usize,
     idx: IdxRef<'a>,
 }
 impl Dictionary {
+    /// create a Dictionary from the dictionary directory.
     pub fn new(root: &path::Path, base: &path::Path) -> Result<Dictionary, DictError> {
         for it in fs::read_dir(root)? {
             let it = it?.path();
@@ -71,7 +76,8 @@ impl Dictionary {
             root.display()
         )))
     }
-
+    /// get the following neighbor words from Idx after `word` from `off`.
+    /// if `off` is negative, list from before `-off`.
     pub fn neighbors(&self, word: &[u8], off: i32) -> DictNeighborIter {
         let ret = match self.idx.get(word) {
             Ok(i) => i,
@@ -85,7 +91,8 @@ impl Dictionary {
             idx: IdxRef::Ref(&self.idx),
         }
     }
-
+    /// get the following neighbor words from Syn after `word` from `off`.
+    /// if `off` is negative, list from before `-off`.
     pub fn neighbors_syn(&self, word: &[u8], off: i32) -> DictNeighborIter {
         let mut start: usize = usize::max_value();
         if let Some(s) = &self.syn {
@@ -102,7 +109,7 @@ impl Dictionary {
         }
     }
 
-    // search by regular expression
+    /// search Idx by regular expression
     pub fn search(&self, expr: &[u8]) -> Result<IdxIter, Error> {
         match str::from_utf8(expr) {
             Ok(e) => {
@@ -116,6 +123,7 @@ impl Dictionary {
             _ => Err(Error::Syntax(String::from("bad utf8"))),
         }
     }
+    /// search Syn by pre-created regular expression object.
     pub fn search_syn<'a>(&'a self, reg: &'a Regex) -> IdxIter {
         IdxIter {
             cur: 0,
@@ -123,6 +131,7 @@ impl Dictionary {
             matcher: Cow::Borrowed(reg),
         }
     }
+    /// search Idx by pre-created regular expression object.
     pub fn search_regex<'a>(&'a self, reg: &'a Regex) -> IdxIter {
         IdxIter {
             cur: 0,
@@ -130,7 +139,7 @@ impl Dictionary {
             matcher: Cow::Borrowed(reg),
         }
     }
-
+    /// lookup `word` in Dictionary. find from Idx, and also find all matches from Syn.
     pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<LookupResult>, DictError> {
         let mut possible = Vec::with_capacity(4);
         possible.push(self.idx.get(word));

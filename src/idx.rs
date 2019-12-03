@@ -4,11 +4,12 @@ use std::io::Read;
 use std::path;
 use super::result::DictError;
 
-// file format:
-// utf8-coded string with '\0' ending.
-// offset in dict file u32 or u64(not used for now)
-// length in dict file u32
 const OFF_LEN_BYTES: usize = 8;
+/// An .idx file representor.
+/// file format:
+/// 1.utf8-coded string with '\0' ending.
+/// 2.offset in dict file u32 or u64(not used for now)
+/// 3.length in dict file u32
 #[derive(Debug)]
 pub struct Idx {
     content: Vec<u8>,//file content
@@ -48,6 +49,7 @@ impl Parser {
     }
 }
 impl Idx {
+    /// create Idx struct from a .idx file, with `filesize`, word `count` and some other arguments.
     pub fn open(file: &path::Path, filesize: usize, count: usize, off_len_bytes: u8) -> Result<Idx, DictError> {
         let mut file_con: Vec<u8>;
         {
@@ -69,9 +71,12 @@ impl Idx {
         //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
         Ok(Idx { content:file_con, index: con.result })
     }
+    /// return the Idx word count.
     pub fn len(&self) -> usize {
         self.index.len()
     }
+    /// retuen the word of Idx in the specified position.
+    /// Err(DictError) if not found.
     pub fn get_word(&self, i: usize) -> Result<&[u8], DictError> {
         //check range first
         if i >= self.index.len() {
@@ -83,6 +88,7 @@ impl Idx {
         Ok(&self.content[start..end])
     }
 
+    /// return the offset and length in .dict file. by the specified position of Idx.
     pub fn get_offset_length(&self, i: usize) -> Result<(u32, u32), DictError> {
         //check range first
         if i >= self.index.len() {
@@ -98,7 +104,10 @@ impl Idx {
         let length = u32::from_be_bytes(buff);
         Ok((offset, length))
     }
-    // the result Err(usize) is used for neighborhood hint.
+    /// get the position in the Idx. if not found, return Err(usize).
+    /// it will first try to do case-sensitive find, it no result,
+    /// try again with case-insensitive find.
+    /// the result Err(usize) is used for neighborhood hint.
     pub fn get(&self, word: &[u8]) -> Result<usize, usize> {
         if Idx::dict_cmp(self.get_word(0).unwrap(), word, true) == Ordering::Greater {
             return Err(0);

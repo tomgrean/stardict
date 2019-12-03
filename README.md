@@ -16,6 +16,8 @@ copy everything in `res/` to dictionary directory, eg: `cp -r res/* /usr/share/s
 and then start the command with `./stardict`.
 Open a browser and access `http://localhost:8888` or replace _localhost_ with an exact IP address.
 
+for more information, run `cargo doc` to get the code documents.
+
 ## Edit dict
 
 Beside stardict tools on the net, you can try dict extract and gendict from [mytool](https://github.com/tomgrean/tools).

@@ -6,6 +6,11 @@ use super::result::DictError;
 use super::idx::Idx;
 
 const OFF_BYTES : usize = 4;
+/// Syn corresponds to .syn file. Syn will read all .syn file content,
+/// and keep it in the private fields.
+/// As the document says, the .syn file may contain more than one same
+/// word entry to different index of .idx, so do not suprise when `get()`
+/// method does not return the same value as you've expected.
 #[derive(Debug)]
 pub struct Syn {
     content: Vec<u8>,//file content
@@ -44,6 +49,8 @@ impl Parser {
     }
 }
 impl Syn {
+    ///create Syn struct from file. with count as synword count from .ifo
+    ///file. if the count is not correct, return Err(DictError).
     pub fn open(file: &path::Path, count: usize) -> Result<Syn, DictError> {
         let mut file_con: Vec<u8>;
         {
@@ -65,9 +72,11 @@ impl Syn {
         //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
         Ok(Syn { content:file_con, index: con.result })
     }
+    /// return syn word count.
     pub fn len(&self) -> usize {
         self.index.len()
     }
+    /// return the word in the exact posision. Err(DictError) if not found.
     pub fn get_word(&self, i: usize) -> Result<&[u8], DictError> {
         //check range first
         if i >= self.index.len() {
@@ -78,7 +87,7 @@ impl Syn {
         let end = self.index[i] as usize;
         Ok(&self.content[start..end])
     }
-
+    /// return the index of Idx in the exact position. Err(i) if not found.
     pub fn get_offset(&self, i: usize) -> Result<usize, usize> {
         //check range first
         if i >= self.index.len() {
@@ -91,7 +100,9 @@ impl Syn {
         let offset = u32::from_be_bytes(buff);
         Ok(offset as usize)
     }
-    // the result Err(usize) is used for neighborhood hint.
+    /// search the word in Syn case-insensitively. return the index if found,
+    /// return Err(usize) if not found. The Err result is used for
+    /// neighborhood hint.
     pub fn get(&self, word: &[u8]) -> Result<usize, usize> {
         if Idx::dict_cmp(self.get_word(0).unwrap(), word, true) == Ordering::Greater {
             return Err(0);
