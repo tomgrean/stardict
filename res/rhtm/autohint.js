@@ -45,21 +45,21 @@ $(document).ready(function() {
 			}
 		});
 		window.scrollTo(0,0);
-		if (curhistoryidx == 0 || wordhistory[curhistoryidx - 1] != qword.val()) {
-			wordhistory[curhistoryidx] = qword.val();
+		if (curhistoryidx == 0 || (wordhistory[curhistoryidx - 1] && wordhistory[curhistoryidx - 1].word != qword.val())) {
+			wordhistory[curhistoryidx] = {"word":qword.val(),"chkreg":chkreg.checked};
 			if (wordhistory.length > 30) {
 				wordhistory.shift();
 			} else {
 				++curhistoryidx;
 			}
 		}
+		if (chkreg.checked) chkreg.checked = false;
 	}
 	formobj.on("submit", function(e) {
 		e.preventDefault();
 		var lookup = "/W/";
 		if (chkreg.checked) {
 			lookup = "/s/";
-			chkreg.checked = false;
 		}
 		$.ajax({
 			url:lookup+qword.val(),
@@ -81,13 +81,15 @@ $(document).ready(function() {
 		}
 		if (curhistoryidx > 1) {
 			curhistoryidx -= 2;
-			qword.val(wordhistory[curhistoryidx]);
+			qword.val(wordhistory[curhistoryidx].word);
+			chkreg.checked = wordhistory[curhistoryidx].chkreg;
 			formobj.submit();
 		}
 	});
 	$("#forwardbtn").on("click", function() {
 		if (curhistoryidx >= 0 && curhistoryidx < wordhistory.length) {
-			qword.val(wordhistory[curhistoryidx]);
+			qword.val(wordhistory[curhistoryidx].word);
+			chkreg.checked = wordhistory[curhistoryidx].chkreg;
 			formobj.submit();
 		} else {
 			curhistoryidx = wordhistory.length;
