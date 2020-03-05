@@ -57,12 +57,14 @@ $(document).ready(function() {
 	}
 	formobj.on("submit", function(e) {
 		e.preventDefault();
-		var lookup = "/W/";
+		var lookup;
 		if (chkreg.checked) {
-			lookup = "/s/";
+			lookup = "/s/^" + qword.val() + "$";
+		} else {
+			lookup = "/W/" + qword.val();
 		}
 		$.ajax({
-			url:lookup+qword.val(),
+			url:lookup,
 			type:"GET",
 			dataType:"html",
 			success:function(data) {
