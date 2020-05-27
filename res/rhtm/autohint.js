@@ -8,20 +8,31 @@ $(document).ready(function() {
 	var hoffobj = $("#hint_offset");
 	var hlenobj = $("#result_length");
 	var chkreg = document.getElementById("chkreg");
+	chkreg.onclick = function() {
+		if (chkreg.checked) {
+			hlenobj.val(10000);
+		} else {
+			hlenobj.val(10);
+		}
+	}
 	qword.autocomplete({
 		//autoFocus:true,
 		source:function(req, res) {
-			$.ajax({
-				url:"/n/" + req.term + "?o=" + hoffobj.val() + "&l=" + hlenobj.val(),
-				type:"GET",
-				dataType:"text",
-				success:function(data) {
-					res(data.split("\n"));
-				},
-				error:function() {
-					res(["ERROR"]);
-				}
-			});
+			if (chkreg.checked) {
+				res([]);
+			} else {
+				$.ajax({
+					url:"/n/" + req.term + "?o=" + hoffobj.val() + "&l=" + hlenobj.val(),
+					type:"GET",
+					dataType:"text",
+					success:function(data) {
+						res(data.split("\n"));
+					},
+					error:function() {
+						res(["ERROR"]);
+					}
+				});
+			}
 		},
 		close:function(e,ui) {
 			if (flag)
@@ -55,7 +66,8 @@ $(document).ready(function() {
 				++curhistoryidx;
 			}
 		}
-		if (chkreg.checked) chkreg.checked = false;
+		hlenobj.val(10);
+		chkreg.checked = false;
 	}
 	formobj.on("submit", function(e) {
 		e.preventDefault();
