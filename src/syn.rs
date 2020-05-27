@@ -1,11 +1,11 @@
+use super::idx::Idx;
+use super::result::DictError;
 use std::cmp::Ordering;
 use std::fs;
 use std::io::Read;
 use std::path;
-use super::result::DictError;
-use super::idx::Idx;
 
-const OFF_BYTES : usize = 4;
+const OFF_BYTES: usize = 4;
 /// Syn corresponds to .syn file. Syn will read all .syn file content,
 /// and keep it in the private fields.
 /// As the document says, the .syn file may contain more than one same
@@ -13,9 +13,9 @@ const OFF_BYTES : usize = 4;
 /// method does not return the same value as you've expected.
 #[derive(Debug)]
 pub struct Syn {
-    content: Vec<u8>,//file content
-    index: Vec<u32>,//end of each word
-    //off_len_bytes: u32,
+    content: Vec<u8>, //file content
+    index: Vec<u32>,  //end of each word
+                      //off_len_bytes: u32,
 }
 
 enum ParseState {
@@ -56,7 +56,7 @@ impl Syn {
         {
             let mut syn_file = fs::File::open(file)?;
             let file_len = syn_file.metadata()?.len();
-            file_con = Vec::with_capacity(file_len as usize + 1);//read to end may realloc...
+            file_con = Vec::with_capacity(file_len as usize + 1); //read to end may realloc...
             syn_file.read_to_end(&mut file_con)?;
         }
         let mut con = Parser {
@@ -64,13 +64,22 @@ impl Syn {
             off_word: 0,
             result: Vec::with_capacity(count),
         };
-        file_con.iter().for_each(|x| con.parse(*x));
+        for x in &file_con {
+            con.parse(*x);
+        }
 
         if count != con.result.len() {
-            return Err(DictError::My(format!("not equal! {} != {}", count, con.result.len())));
+            return Err(DictError::My(format!(
+                "not equal! {} != {}",
+                count,
+                con.result.len()
+            )));
         }
         //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
-        Ok(Syn { content:file_con, index: con.result })
+        Ok(Syn {
+            content: file_con,
+            index: con.result,
+        })
     }
     /// return syn word count.
     pub fn len(&self) -> usize {
@@ -83,7 +92,11 @@ impl Syn {
             return Err(DictError::NotFound(i));
         }
 
-        let start = if i == 0 { 0usize } else { self.index[i - 1] as usize + OFF_BYTES + 1 };
+        let start = if i == 0 {
+            0usize
+        } else {
+            self.index[i - 1] as usize + OFF_BYTES + 1
+        };
         let end = self.index[i] as usize;
         Ok(&self.content[start..end])
     }
@@ -107,7 +120,8 @@ impl Syn {
         if Idx::dict_cmp(self.get_word(0).unwrap(), word, true) == Ordering::Greater {
             return Err(0);
         }
-        if Idx::dict_cmp(self.get_word(self.index.len() - 1).unwrap(), word, true) == Ordering::Less {
+        if Idx::dict_cmp(self.get_word(self.index.len() - 1).unwrap(), word, true) == Ordering::Less
+        {
             return Err(self.index.len());
         }
 
@@ -126,7 +140,10 @@ impl Syn {
         }
         // base is always in [0, size) because base <= mid.
         let cmp = Idx::dict_cmp(self.get_word(base).unwrap(), word, true);
-        if cmp == Ordering::Equal { Ok(base) } else { Err(base + (cmp == Ordering::Less) as usize) }
+        if cmp == Ordering::Equal {
+            Ok(base)
+        } else {
+            Err(base + (cmp == Ordering::Less) as usize)
+        }
     }
 }
-

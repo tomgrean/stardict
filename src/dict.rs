@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::prelude::FileExt;
 use std::path;
 
 use super::result::DictError;
@@ -16,10 +16,9 @@ impl Dict {
         Ok(Dict { dictf: f })
     }
     /// read `length` from `start`
-    pub fn read(&mut self, start: u64, length: usize) -> Result<Vec<u8>, DictError> {
-        self.dictf.seek(SeekFrom::Start(start))?;
+    pub fn read(&self, start: u64, length: usize) -> Result<Vec<u8>, DictError> {
         let mut result = vec![0u8; length];
-        self.dictf.read_exact(&mut *result)?;
+        self.dictf.read_exact_at(&mut *result, start)?;
         Ok(result)
     }
 }

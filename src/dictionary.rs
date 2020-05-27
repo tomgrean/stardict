@@ -7,9 +7,9 @@ use self::regex::bytes::Regex;
 use self::regex::Error;
 use super::dict::Dict;
 use super::idx::Idx;
-use super::syn::Syn;
 use super::ifo::Ifo;
 use super::result::DictError;
+use super::syn::Syn;
 
 /// used to make Syn and Idx iterator work together.
 pub enum IdxRef<'a> {
@@ -140,7 +140,7 @@ impl Dictionary {
         }
     }
     /// lookup `word` in Dictionary. find from Idx, and also find all matches from Syn.
-    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<LookupResult>, DictError> {
+    pub fn lookup(&self, word: &[u8]) -> Result<Vec<LookupResult>, DictError> {
         let mut possible = Vec::with_capacity(4);
         possible.push(self.idx.get(word));
 

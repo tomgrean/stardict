@@ -3,19 +3,19 @@ extern crate regex;
 pub mod dict;
 pub mod dictionary;
 pub mod idx;
-pub mod syn;
 pub mod ifo;
-pub mod result;
 pub mod reformat;
+pub mod result;
+pub mod syn;
 //pub mod web;
 
-use std::{env, fs, path, str};
-use std::iter::{Iterator};
+use self::regex::bytes::Regex;
+use std::cmp::Ordering;
 use std::io::prelude::*;
+use std::iter::Iterator;
 use std::net::TcpListener;
 use std::net::TcpStream;
-use std::cmp::Ordering;
-use self::regex::bytes::Regex;
+use std::{env, fs, path, str};
 //use self::regex::Error;
 
 /// StarDict contains all dictionary found within the specified file system directory.
@@ -25,11 +25,11 @@ pub struct StarDict {
 
 /// An iterator that merges several underlying iterators. try to dedup one duplicated
 /// word from each iterator.
-pub struct WordMergeIter<'a, T: Iterator<Item=&'a [u8]>> {
+pub struct WordMergeIter<'a, T: Iterator<Item = &'a [u8]>> {
     wordit: Vec<T>,
     cur: Vec<Option<&'a [u8]>>,
 }
-impl<'a, T: Iterator<Item=&'a [u8]>> Iterator for WordMergeIter<'a, T> {
+impl<'a, T: Iterator<Item = &'a [u8]>> Iterator for WordMergeIter<'a, T> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
         let l = self.cur.len();
@@ -43,15 +43,13 @@ impl<'a, T: Iterator<Item=&'a [u8]>> Iterator for WordMergeIter<'a, T> {
             x = match (self.cur[x], self.cur[i]) {
                 (None, _) => i,
                 (_, None) => x,
-                (Some(a), Some(b)) => {
-                    match idx::Idx::dict_cmp(a, b, false) {
-                        Ordering::Greater => i,
-                        Ordering::Equal => {
-                            self.cur[i] = self.wordit[i].next();
-                            x
-                        },
-                        _ => x,
+                (Some(a), Some(b)) => match idx::Idx::dict_cmp(a, b, false) {
+                    Ordering::Greater => i,
+                    Ordering::Equal => {
+                        self.cur[i] = self.wordit[i].next();
+                        x
                     }
+                    _ => x,
                 },
             };
             i += 1;
@@ -139,9 +137,9 @@ impl StarDict {
     }
     /// Lookup the word. Find in the Idx case-sensitively, if not found then try to do
     /// case-insensitive search. Also find all case-insensitive matching words in Syn.
-    pub fn lookup(&mut self, word: &[u8]) -> Result<Vec<dictionary::LookupResult>, result::DictError> {
+    pub fn lookup(&self, word: &[u8]) -> Result<Vec<dictionary::LookupResult>, result::DictError> {
         let mut ret: Vec<dictionary::LookupResult> = Vec::with_capacity(self.directories.len());
-        for d in self.directories.iter_mut() {
+        for d in self.directories.iter() {
             if let Ok(x) = d.lookup(word) {
                 ret.extend(x);
             }
@@ -156,15 +154,15 @@ struct StardictUrl {
 impl StardictUrl {
     fn new() -> StardictUrl {
         StardictUrl {
-            path: [0u8;4],
+            path: [0u8; 4],
             word: Vec::with_capacity(16),
         }
     }
     fn byte_to_u8(b: u8) -> u8 {
         match b {
-            b'0' ..= b'9' => b - b'0',
-            b'A' ..= b'F' => b + 10 - b'A',
-            b'a' ..= b'f' => b + 10 - b'a',
+            b'0'..=b'9' => b - b'0',
+            b'A'..=b'F' => b + 10 - b'A',
+            b'a'..=b'f' => b + 10 - b'a',
             _ => b,
         }
     }
@@ -179,38 +177,47 @@ impl StardictUrl {
 }
 fn main() {
     let mut host = String::from("localhost:8888");
-    let mut _daemon = false;
-    let mut pendarg = 0u8;
+    let mut dictdir = String::from("/usr/share/stardict/dic");
+    let dict;
+    {
+        let mut _daemon = false;
+        let mut pendarg = 0u8;
 
-    for arg in env::args().skip(1) {
-        //parse options.
-        println!("cmd args: {}", &arg);
-        let a = arg.as_bytes();
-        match pendarg {
-            b'h' => {
-                host.clear();
-                host.push_str(&arg);
-                pendarg = 0;
-            },
-            b'd' => {
-                _daemon = true;
-                pendarg = 0;
-            },
-            0 => (),
-            _ => {
-                println!("parameter: [-d] [-h host:port]");
-                return;
+        for arg in env::args().skip(1) {
+            //parse options.
+            println!("cmd args: {}", &arg);
+            let a = arg.as_bytes();
+            match pendarg {
+                b'h' => {
+                    host.clear();
+                    host.push_str(&arg);
+                    pendarg = 0;
+                }
+                b'd' => {
+                    _daemon = true;
+                    pendarg = 0;
+                }
+                b'r' => {
+                    dictdir.clear();
+                    dictdir.push_str(&arg);
+                    pendarg = 0;
+                }
+                0 => (),
+                _ => {
+                    println!("parameter: [-d] [-h host:port] [-r dict-root-dir]");
+                    return;
+                }
+            }
+            if a[0] == b'-' {
+                pendarg = a[1];
             }
         }
-        if a[0] == b'-' {
-            pendarg = a[1];
-        }
-    }
-    //println!("get arg host={}, daemon={}", host, daemon);
-    //if daemon {
-    //}
+        //println!("get arg host={}, daemon={}", host, daemon);
+        //if daemon {
+        //}
 
-    let mut dict = StarDict::new(&path::PathBuf::from("/usr/share/stardict/dic")).unwrap();
+        dict = StarDict::new(&path::PathBuf::from(&dictdir)).unwrap();
+    }
     println!("dict size={}", dict.directories.len());
     //for d in dict.info().iter() {
     //    println!("dict: wordcount:{} {}", d.word_count, d.name);
@@ -218,59 +225,66 @@ fn main() {
     //webs
     let listener = TcpListener::bind(&host).unwrap();
     //let pool = web::ThreadPool::new(4);
-
-    let cr = reformat::ContentReformat::from_config_file(&path::PathBuf::from("/usr/share/stardict/dic/rformat.conf"));
+    let cr = {
+        let mut fmtp = path::PathBuf::from(&dictdir);
+        fmtp.push("/rformat.conf");
+        reformat::ContentReformat::from_config_file(&fmtp)
+    };
 
     for stream in listener.incoming()/*.take(1)*/ {
         let stream = stream.unwrap();
 
         //pool.execute(
-            handle_connection(stream, &mut dict, &cr);
+        handle_connection(stream, &dict, &cr, &dictdir);
         //);
     }
 
     println!("Shutting down.");
 }
-fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::ContentReformat) {
+fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::ContentReformat, dictdir: &str) {
     let mut buffer = [0u8; 512];
     stream.read(&mut buffer).unwrap();
 
     let get = b"GET /";
 
     //("HTTP/1.0 200 OK\r\nConnection: close\r\n", "index.html");
-    let mut content:Vec<u8> = Vec::new();
+    let mut content: Vec<u8> = Vec::new();
     let mut surl = StardictUrl::new();
 
     if buffer.starts_with(get) {
-        let mut state = 0i16;//>=0 path, -1 w, -2 p0w, -3 p1w
+        let mut state = 0i16; //>=0 path, -1 w, -2 p0w, -3 p1w
         let mut w = 0u8;
-        buffer[5..].iter().take_while(|c| **c != b' ').for_each(|c|{
-            if state < 0 {
-                if *c == b'%' {
-                    state = -2;
-                } else {
-                    if state == -2 {
-                        w = StardictUrl::byte_to_u8(*c) << 4;
-                        state = -3;
-                    } else if state == -3 {
-                        w |= StardictUrl::byte_to_u8(*c);
-                        surl.add_byte(w);
-                        state = -1;
+        buffer[5..]
+            .iter()
+            .take_while(|c| **c != b' ')
+            .for_each(|c| {
+                if state < 0 {
+                    if *c == b'%' {
+                        state = -2;
                     } else {
-                        surl.add_byte(*c);
+                        if state == -2 {
+                            w = StardictUrl::byte_to_u8(*c) << 4;
+                            state = -3;
+                        } else if state == -3 {
+                            w |= StardictUrl::byte_to_u8(*c);
+                            surl.add_byte(w);
+                            state = -1;
+                        } else {
+                            surl.add_byte(*c);
+                        }
                     }
+                } else if *c == b'/' {
+                    state = -1;
+                } else {
+                    surl.add_path(*c, state as usize);
+                    state += 1;
                 }
-            } else if *c == b'/' {
-                state = -1;
-            } else {
-                surl.add_path(*c, state as usize);
-                state += 1;
-            }
-        });
+            });
 
         //println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
         if surl.word.len() > 0 {
-            if surl.path[0] == b'W' {//word lookup
+            if surl.path[0] == b'W' {
+                //word lookup
                 match dict.lookup(&surl.word) {
                     Ok(x) => {
                         content.extend(b"<ol>");
@@ -293,42 +307,51 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
                             content.extend(b" (");
                             content.extend(e.word);
                             content.extend(b") </div><div class='res_definition'>".iter());
-                            for (a, b) in e.dictionary.same_type_sequence.as_bytes().iter().zip(e.result.split(|c| *c == 0)) {
-                                content.extend(&cr.replace_all(*a, e.dictionary.dict_path.as_bytes(), b));
+                            for (a, b) in e
+                                .dictionary
+                                .same_type_sequence
+                                .as_bytes()
+                                .iter()
+                                .zip(e.result.split(|c| *c == 0))
+                            {
+                                content.extend(&cr.replace_all(
+                                    *a,
+                                    e.dictionary.dict_path.as_bytes(),
+                                    b,
+                                ));
                             }
                             content.extend(b"</div>\n");
                         }
-
-                    },
+                    }
                     Err(e) => println!("err: {:?}", e),
                 }
-            } else if surl.path[0] == b'n' {//neighbor words reference
+            } else if surl.path[0] == b'n' {
+                //neighbor words reference
                 for s in dict.neighbors(&surl.word, 0).take(10) {
                     content.extend(s);
                     content.extend(b"\n");
                 }
-            } else if surl.path[0] == b's' {//search with regex
+            } else if surl.path[0] == b's' {
+                //search with regex
                 match str::from_utf8(&surl.word) {
-                    Ok(x) => {
-                        match Regex::new(x) {
-                            Ok(v) => {
-                                content.extend(b"/~/:<ol>");
-                                dict.search(&v).take(10000).for_each(|e| {
-                                    content.extend(b"<li><a>");
-                                    content.extend(e);
-                                    content.extend(b"</a></li>\n");
-                                });
-                                content.extend(b"</ol>");
-                            },
-                            Err(e) => println!("err: {:?}", e),
+                    Ok(x) => match Regex::new(x) {
+                        Ok(v) => {
+                            content.extend(b"/~/:<ol>");
+                            dict.search(&v).take(10000).for_each(|e| {
+                                content.extend(b"<li><a>");
+                                content.extend(e);
+                                content.extend(b"</a></li>\n");
+                            });
+                            content.extend(b"</ol>");
                         }
+                        Err(e) => println!("err: {:?}", e),
                     },
                     Err(e) => println!("err: {:?}", e),
                 }
             } else if surl.path[0] == b'r' {
                 //html js css page etc.
                 if let Ok(fname) = str::from_utf8(&surl.word) {
-                    let mut pfile = path::PathBuf::from("/usr/share/stardict/dic");
+                    let mut pfile = path::PathBuf::from(dictdir);
                     pfile.push(fname);
                     if let Ok(mut f) = fs::File::open(pfile) {
                         if f.read_to_end(&mut content).is_err() {
@@ -371,7 +394,9 @@ fn handle_connection(mut stream: TcpStream, dict: &mut StarDict, cr: &reformat::
         stream.write(&content).unwrap();
         stream.flush().unwrap();
     } else {
-        stream.write(b"HTTP/1.0 404 NOT FOUND\r\n\r\nnot found").unwrap();
+        stream
+            .write(b"HTTP/1.0 404 NOT FOUND\r\n\r\nnot found")
+            .unwrap();
         stream.flush().unwrap();
     }
 }
@@ -413,4 +438,3 @@ blockquote{
 <input type='submit' value='='/> &nbsp;<input type='button' id='backwardbtn' value='<'/> <input type='button' id='forwardbtn' value='>'/>
 </form><hr/>
 <div id='dict_content'></div></body></html>";
-

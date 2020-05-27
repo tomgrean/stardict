@@ -1,13 +1,13 @@
 extern crate aho_corasick;
 extern crate regex;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::BufRead;
-use std::borrow::Cow;
-use std::{path, fs, io};
+use std::{fs, io, path};
 
 use self::aho_corasick::AhoCorasick;
-use self::regex::bytes::{Regex, NoExpand};
+use self::regex::bytes::{NoExpand, Regex};
 
 /// Used to replace strings in the lookup result.
 /// see ContentReformat.
@@ -22,7 +22,7 @@ pub struct Replacer {
 /// Detailed configuration file format, see `from_config_file()`.
 pub struct ContentReformat {
     repl: HashMap<u8, Vec<Replacer>>,
-    regex_cache: HashMap<(u8,usize), Regex>,
+    regex_cache: HashMap<(u8, usize), Regex>,
 }
 
 impl ContentReformat {
@@ -31,7 +31,7 @@ impl ContentReformat {
             b't' => b'\t',
             b'n' => b'\n',
             b'r' => b'\r',
-            _ => c
+            _ => c,
         }
     }
     /// load a configuration file. create a `ContentReformat` struct.
@@ -49,76 +49,100 @@ impl ContentReformat {
             Ok(f) => file = f,
             Err(e) => {
                 println!("open config failed:{:?}", e);
-                return ContentReformat { repl: HashMap::new(), regex_cache: HashMap::new() };
-            },
+                return ContentReformat {
+                    repl: HashMap::new(),
+                    regex_cache: HashMap::new(),
+                };
+            }
         }
         let mut repl: HashMap<u8, Vec<Replacer>> = HashMap::new();
         let mut dict_format = 0u8;
         let mut regex_cache = HashMap::new();
-        io::BufReader::new(file).split(b'\n').filter(|x| match x {
-            Ok(v) => {
-                if v.len() > 0 && v[0] != b'#' {
-                    true
-                } else {
-                    false
+        io::BufReader::new(file)
+            .split(b'\n')
+            .filter(|x| match x {
+                Ok(v) => {
+                    if v.len() > 0 && v[0] != b'#' {
+                        true
+                    } else {
+                        false
+                    }
                 }
-            },
-            _ => false,
-        }).for_each(|x|{ if let Ok(v) = x {
-            if v.len() > 1 && v[0] == b':' {
-                dict_format = v[1];
-            } else if dict_format != 0u8 {
-                let mut op_idx = 0usize;
-                let new_vec = if v.contains(& b'\\') {
-                    let mut nv = Vec::with_capacity(v.len() - 1);
-                    let mut i = 0usize;
-                    let mut esc = false;
-                    while i < v.len() {
-                        if op_idx == 0 && (v[i] == b'=' || v[i] == b'~' || v[i] == b'@') && !esc {
-                            op_idx = nv.len();
-                        }
-                        if !esc && v[i] == b'\\' {
-                            esc = true;
+                _ => false,
+            })
+            .for_each(|x| {
+                if let Ok(v) = x {
+                    if v.len() > 1 && v[0] == b':' {
+                        dict_format = v[1];
+                    } else if dict_format != 0u8 {
+                        let mut op_idx = 0usize;
+                        let new_vec = if v.contains(&b'\\') {
+                            let mut nv = Vec::with_capacity(v.len() - 1);
+                            let mut i = 0usize;
+                            let mut esc = false;
+                            while i < v.len() {
+                                if op_idx == 0
+                                    && (v[i] == b'=' || v[i] == b'~' || v[i] == b'@')
+                                    && !esc
+                                {
+                                    op_idx = nv.len();
+                                }
+                                if !esc && v[i] == b'\\' {
+                                    esc = true;
+                                } else {
+                                    if esc {
+                                        nv.push(ContentReformat::from_escape(v[i]));
+                                    } else {
+                                        nv.push(v[i]);
+                                    }
+                                    esc = false;
+                                }
+
+                                i += 1;
+                            }
+                            nv
                         } else {
-                            if esc {
-                                nv.push(ContentReformat::from_escape(v[i]));
+                            op_idx = v
+                                .iter()
+                                .position(|&a| a == b'=' || a == b'~' || a == b'@')
+                                .unwrap_or(0);
+                            v
+                        };
+
+                        if op_idx > 0 {
+                            let obj = Replacer {
+                                line: new_vec,
+                                op_idx,
+                            };
+                            let reg_cache = if obj.line[op_idx] == b'~' {
+                                //do regex cache.
+                                Some(
+                                    Regex::new(
+                                        std::str::from_utf8(&obj.line[..obj.op_idx]).unwrap(),
+                                    )
+                                    .unwrap(),
+                                )
                             } else {
-                                nv.push(v[i]);
+                                None
+                            };
+                            match repl.get_mut(&dict_format) {
+                                Some(r) => {
+                                    if let Some(c) = reg_cache {
+                                        regex_cache.insert((dict_format, r.len()), c);
+                                    }
+                                    r.push(obj);
+                                }
+                                None => {
+                                    if let Some(c) = reg_cache {
+                                        regex_cache.insert((dict_format, 0), c);
+                                    }
+                                    repl.insert(dict_format, vec![obj]);
+                                }
                             }
-                            esc = false;
                         }
-
-                        i += 1;
-                    }
-                    nv
-                } else {
-                    op_idx = v.iter().position(|&a| a == b'=' || a == b'~' || a == b'@').unwrap_or(0);
-                    v
-                };
-
-                if op_idx > 0 {
-                    let obj = Replacer { line: new_vec, op_idx };
-                    let reg_cache = if obj.line[op_idx] == b'~' {
-                        //do regex cache.
-                        Some(Regex::new(std::str::from_utf8(&obj.line[..obj.op_idx]).unwrap()).unwrap())
-                    } else { None };
-                    match repl.get_mut(&dict_format) {
-                        Some(r) => {
-                            if let Some(c) = reg_cache {
-                                regex_cache.insert((dict_format, r.len()), c);
-                            }
-                            r.push(obj);
-                        },
-                        None => {
-                            if let Some(c) = reg_cache {
-                                regex_cache.insert((dict_format, 0), c);
-                            }
-                            repl.insert(dict_format, vec![obj]);
-                        },
                     }
                 }
-            }
-        }});
+            });
         ContentReformat { repl, regex_cache }
     }
     /// find all text in `haystack`, according to `dict_format` and `dict_path`, to
@@ -134,13 +158,13 @@ impl ContentReformat {
             for (hi, v) in x.iter().enumerate() {
                 if v.line[v.op_idx] == b'=' {
                     from.push(&v.line[..v.op_idx]);
-                    to.push(Cow::Borrowed(&v.line[(v.op_idx+1)..]));
+                    to.push(Cow::Borrowed(&v.line[(v.op_idx + 1)..]));
                 } else if v.line[v.op_idx] == b'@' {
                     from.push(&v.line[..v.op_idx]);
                     let mut not_first = false;
                     let mut bufe = Vec::new();
 
-                    for s in v.line[(v.op_idx+1)..].split(|x|*x == b'@') {
+                    for s in v.line[(v.op_idx + 1)..].split(|x| *x == b'@') {
                         if not_first {
                             if s.len() > 0 {
                                 match s[0] {
@@ -169,7 +193,7 @@ impl ContentReformat {
                     };
                     */
                     if let Some(re) = self.regex_cache.get(&(dict_format, hi)) {
-                        match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx+1)..])) {
+                        match re.replace_all(&hay, NoExpand(&v.line[(v.op_idx + 1)..])) {
                             Cow::Owned(o) => hay = Cow::Owned(o),
                             _ => (),
                         }
@@ -180,4 +204,3 @@ impl ContentReformat {
         AhoCorasick::new(&from).replace_all_bytes(&hay, &to)
     }
 }
-

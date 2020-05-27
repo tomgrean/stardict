@@ -1,8 +1,8 @@
+use super::result::DictError;
 use std::cmp::Ordering;
 use std::fs;
 use std::io::Read;
 use std::path;
-use super::result::DictError;
 
 const OFF_LEN_BYTES: usize = 8;
 /// An .idx file representor.
@@ -12,9 +12,9 @@ const OFF_LEN_BYTES: usize = 8;
 /// 3.length in dict file u32
 #[derive(Debug)]
 pub struct Idx {
-    content: Vec<u8>,//file content
-    index: Vec<u32>,//end of each word
-    //off_len_bytes: u32,
+    content: Vec<u8>, //file content
+    index: Vec<u32>,  //end of each word
+                      //off_len_bytes: u32,
 }
 
 enum ParseState {
@@ -50,11 +50,16 @@ impl Parser {
 }
 impl Idx {
     /// create Idx struct from a .idx file, with `filesize`, word `count` and some other arguments.
-    pub fn open(file: &path::Path, filesize: usize, count: usize, off_len_bytes: u8) -> Result<Idx, DictError> {
+    pub fn open(
+        file: &path::Path,
+        filesize: usize,
+        count: usize,
+        off_len_bytes: u8,
+    ) -> Result<Idx, DictError> {
         let mut file_con: Vec<u8>;
         {
             let mut idx_file = fs::File::open(file)?;
-            file_con = Vec::with_capacity(filesize + 1);//read to end may realloc...
+            file_con = Vec::with_capacity(filesize + 1); //read to end may realloc...
             idx_file.read_to_end(&mut file_con)?;
         }
         let mut con = Parser {
@@ -63,13 +68,22 @@ impl Idx {
             off_word: 0,
             result: Vec::with_capacity(count),
         };
-        file_con.iter().for_each(|x| con.parse(*x));
+        for x in &file_con {
+            con.parse(*x);
+        }
 
         if count != con.result.len() {
-            return Err(DictError::My(format!("not equal! {} != {}", count, con.result.len())));
+            return Err(DictError::My(format!(
+                "not equal! {} != {}",
+                count,
+                con.result.len()
+            )));
         }
         //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
-        Ok(Idx { content:file_con, index: con.result })
+        Ok(Idx {
+            content: file_con,
+            index: con.result,
+        })
     }
     /// return the Idx word count.
     pub fn len(&self) -> usize {
@@ -83,7 +97,11 @@ impl Idx {
             return Err(DictError::NotFound(i));
         }
 
-        let start = if i == 0 { 0usize } else { self.index[i - 1] as usize + OFF_LEN_BYTES + 1 };
+        let start = if i == 0 {
+            0usize
+        } else {
+            self.index[i - 1] as usize + OFF_LEN_BYTES + 1
+        };
         let end = self.index[i] as usize;
         Ok(&self.content[start..end])
     }
@@ -112,10 +130,12 @@ impl Idx {
         if Idx::dict_cmp(self.get_word(0).unwrap(), word, true) == Ordering::Greater {
             return Err(0);
         }
-        if Idx::dict_cmp(self.get_word(self.index.len() - 1).unwrap(), word, true) == Ordering::Less {
+        if Idx::dict_cmp(self.get_word(self.index.len() - 1).unwrap(), word, true) == Ordering::Less
+        {
             return Err(self.index.len());
         }
-        self.binary_search(word, false).or_else(|_|self.binary_search(word, true))
+        self.binary_search(word, false)
+            .or_else(|_| self.binary_search(word, true))
     }
     fn binary_search(&self, word: &[u8], ignore_case: bool) -> Result<usize, usize> {
         let mut size = self.index.len();
@@ -132,7 +152,11 @@ impl Idx {
         }
         // base is always in [0, size) because base <= mid.
         let cmp = Idx::dict_cmp(self.get_word(base).unwrap(), word, ignore_case);
-        if cmp == Ordering::Equal { Ok(base) } else { Err(base + (cmp == Ordering::Less) as usize) }
+        if cmp == Ordering::Equal {
+            Ok(base)
+        } else {
+            Err(base + (cmp == Ordering::Less) as usize)
+        }
     }
     pub fn dict_cmp(w1: &[u8], w2: &[u8], ignore_case: bool) -> Ordering {
         let w1len = w1.len();
@@ -188,4 +212,3 @@ impl Idx {
         }
     }
 }
-
