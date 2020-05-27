@@ -5,12 +5,14 @@ $(document).ready(function() {
 	var dict_content = $("#dict_content");
 	var qword = $("#qwt");
 	var formobj = $("#qwFORM");
+	var hoffobj = $("#hint_offset");
+	var hlenobj = $("#result_length");
 	var chkreg = document.getElementById("chkreg");
 	qword.autocomplete({
 		//autoFocus:true,
 		source:function(req, res) {
 			$.ajax({
-				url:"/n/" + req.term,
+				url:"/n/" + req.term + "?o=" + hoffobj.val() + "&l=" + hlenobj.val(),
 				type:"GET",
 				dataType:"text",
 				success:function(data) {
@@ -64,7 +66,7 @@ $(document).ready(function() {
 			lookup = "/W/" + qword.val();
 		}
 		$.ajax({
-			url:lookup,
+			url:lookup + "?l=" + hlenobj.val(),
 			type:"GET",
 			dataType:"html",
 			success:function(data) {

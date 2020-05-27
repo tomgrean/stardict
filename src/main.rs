@@ -150,19 +150,23 @@ impl StarDict {
 struct StardictUrl {
     path: [u8; 4usize],
     word: Vec<u8>,
+    offset: i32, // args for offset and length, may use BTreeMap, but it cost too much.
+    length: usize,
 }
 impl StardictUrl {
     fn new() -> StardictUrl {
         StardictUrl {
-            path: [0u8; 4],
+            path: [0; 4],
             word: Vec::with_capacity(16),
+            offset: 0,
+            length: 0,
         }
     }
     fn byte_to_u8(b: u8) -> u8 {
         match b {
             b'0'..=b'9' => b - b'0',
-            b'A'..=b'F' => b + 10 - b'A',
-            b'a'..=b'f' => b + 10 - b'a',
+            b'A'..=b'F' => b - (b'A' - 10),
+            b'a'..=b'f' => b - (b'a' - 10),
             _ => b,
         }
     }
@@ -173,6 +177,12 @@ impl StardictUrl {
     }
     fn add_byte(&mut self, c: u8) {
         self.word.push(c);
+    }
+    fn add_arg_offset(&mut self, c: i32) {
+        self.offset = self.offset * 10 + c;
+    }
+    fn add_arg_length(&mut self, c: usize) {
+        self.length = self.length * 10 + c;
     }
 }
 fn main() {
@@ -227,11 +237,11 @@ fn main() {
     //let pool = web::ThreadPool::new(4);
     let cr = {
         let mut fmtp = path::PathBuf::from(&dictdir);
-        fmtp.push("/rformat.conf");
+        fmtp.push("rformat.conf");
         reformat::ContentReformat::from_config_file(&fmtp)
     };
 
-    for stream in listener.incoming()/*.take(1)*/ {
+    for stream in listener.incoming() {
         let stream = stream.unwrap();
 
         //pool.execute(
@@ -241,7 +251,12 @@ fn main() {
 
     println!("Shutting down.");
 }
-fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::ContentReformat, dictdir: &str) {
+fn handle_connection(
+    mut stream: TcpStream,
+    dict: &StarDict,
+    cr: &reformat::ContentReformat,
+    dictdir: &str,
+) {
     let mut buffer = [0u8; 512];
     stream.read(&mut buffer).unwrap();
 
@@ -252,7 +267,7 @@ fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::Cont
     let mut surl = StardictUrl::new();
 
     if buffer.starts_with(get) {
-        let mut state = 0i16; //>=0 path, -1 w, -2 p0w, -3 p1w
+        let mut state = 0i16; //>=0 path, -1 w, -2 p0w, -3 p1w, -4 argKey, -5 argVal
         let mut w = 0u8;
         buffer[5..]
             .iter()
@@ -261,6 +276,9 @@ fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::Cont
                 if state < 0 {
                     if *c == b'%' {
                         state = -2;
+                    } else if *c == b'?' {
+                        // parse args.
+                        state = -4;
                     } else {
                         if state == -2 {
                             w = StardictUrl::byte_to_u8(*c) << 4;
@@ -269,6 +287,40 @@ fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::Cont
                             w |= StardictUrl::byte_to_u8(*c);
                             surl.add_byte(w);
                             state = -1;
+                        } else if state == -4 {
+                            if *c == b'=' {
+                                state = -5;
+                            } else {
+                                w = *c;
+                            }
+                        } else if state == -5 {
+                            match *c {
+                                b'&' => {
+                                    state = -4;
+                                }
+                                b'-' => {
+                                    if w == b'o' {
+                                        w = b'O';
+                                    } else {
+                                        state = -32768;
+                                    }
+                                }
+                                b'0'..=b'9' => {
+                                    let v: i32 = (*c - b'0') as i32;
+                                    if w == b'o' {
+                                        surl.add_arg_offset(v);
+                                    } else if w == b'O' {
+                                        // negative offset
+                                        surl.add_arg_offset(-v);
+                                    } else if w == b'l' {
+                                        // length
+                                        surl.add_arg_length(v as usize);
+                                    }
+                                }
+                                _ => {
+                                    state = -32768;
+                                }
+                            }
                         } else {
                             surl.add_byte(*c);
                         }
@@ -281,7 +333,10 @@ fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::Cont
                 }
             });
 
-        //println!("get from url path={}, word={}", str::from_utf8(&surl.path[..]).unwrap(), str::from_utf8(&surl.word).unwrap());
+        //println!("get from url path={}, word={}, off={}, len={}", str::from_utf8(&surl.path).unwrap(), str::from_utf8(&surl.word).unwrap(), surl.offset, surl.length);
+        if surl.length == 0 {
+            surl.length = 10;
+        }
         if surl.word.len() > 0 {
             if surl.path[0] == b'W' {
                 //word lookup
@@ -327,7 +382,7 @@ fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::Cont
                 }
             } else if surl.path[0] == b'n' {
                 //neighbor words reference
-                for s in dict.neighbors(&surl.word, 0).take(10) {
+                for s in dict.neighbors(&surl.word, surl.offset).take(surl.length) {
                     content.extend(s);
                     content.extend(b"\n");
                 }
@@ -337,7 +392,7 @@ fn handle_connection(mut stream: TcpStream, dict: &StarDict, cr: &reformat::Cont
                     Ok(x) => match Regex::new(x) {
                         Ok(v) => {
                             content.extend(b"/~/:<ol>");
-                            dict.search(&v).take(10000).for_each(|e| {
+                            dict.search(&v).take(surl.length).for_each(|e| {
                                 content.extend(b"<li><a>");
                                 content.extend(e);
                                 content.extend(b"</a></li>\n");
@@ -415,6 +470,9 @@ const HOME_PAGE: &'static str = r"<html><head>
  border: thin solid black;
  padding: 5px;
 }
+.numi{
+ width:5em;
+}
 span{
  color:green;
 }
@@ -436,5 +494,6 @@ blockquote{
 <form id='qwFORM' action='/' method='GET'>
 <input id='qwt' type='text' name='w' class='ui-autocomplete-input' placeholder='input word' required='required' value=''/>/<input id='chkreg' type='checkbox'/>/
 <input type='submit' value='='/> &nbsp;<input type='button' id='backwardbtn' value='<'/> <input type='button' id='forwardbtn' value='>'/>
+(<input type='number' class='numi' id='hint_offset' value='0' disabled/>, <input type='number' class='numi' id='result_length' value='10'/>)
 </form><hr/>
 <div id='dict_content'></div></body></html>";
