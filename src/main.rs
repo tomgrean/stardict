@@ -242,17 +242,17 @@ fn main() {
     };
 
     for stream in listener.incoming() {
-        let stream = stream.unwrap();
+        let mut stream = stream.unwrap();
 
         //pool.execute(
-        handle_connection(stream, &dict, &cr, &dictdir);
+        handle_connection(&mut stream, &dict, &cr, &dictdir);
         //);
     }
 
     println!("Shutting down.");
 }
 fn handle_connection(
-    mut stream: TcpStream,
+    stream: &mut TcpStream,
     dict: &StarDict,
     cr: &reformat::ContentReformat,
     dictdir: &str,
