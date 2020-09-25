@@ -245,7 +245,11 @@ fn main() {
         let mut stream = stream.unwrap();
 
         //pool.execute(
-        handle_connection(&mut stream, &dict, &cr, &dictdir);
+        match handle_connection(&mut stream, &dict, &cr, &dictdir) {
+            Err(_) => println!("communication failed!"),
+            _ => (),
+        }
+
         //);
     }
 
@@ -256,9 +260,9 @@ fn handle_connection(
     dict: &StarDict,
     cr: &reformat::ContentReformat,
     dictdir: &str,
-) {
+) -> std::io::Result<()> {
     let mut buffer = [0u8; 512];
-    stream.read(&mut buffer).unwrap();
+    stream.read(&mut buffer)?;
 
     let get = b"GET /";
 
@@ -435,25 +439,24 @@ fn handle_connection(
         b"text/html"
     }
     if content.len() > 0 {
-        stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ").unwrap();
+        stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ")?;
         if surl.path[0] == b'n' {
-            stream.write(b"text/plain").unwrap();
+            stream.write(b"text/plain")?;
         } else if surl.path[0] == b'r' {
-            stream.write(map_by_file(&surl.word)).unwrap();
+            stream.write(map_by_file(&surl.word))?;
         } else {
-            stream.write(b"text/html").unwrap();
+            stream.write(b"text/html")?;
         }
-        stream.write(b"\r\nContent-Length: ").unwrap();
-        stream.write(content.len().to_string().as_bytes()).unwrap();
-        stream.write(b"\r\nConnection: close\r\n\r\n").unwrap();
-        stream.write(&content).unwrap();
-        stream.flush().unwrap();
+        stream.write(b"\r\nContent-Length: ")?;
+        stream.write(content.len().to_string().as_bytes())?;
+        stream.write(b"\r\nConnection: close\r\n\r\n")?;
+        stream.write(&content)?;
+        stream.flush()?;
     } else {
-        stream
-            .write(b"HTTP/1.0 404 NOT FOUND\r\n\r\nnot found")
-            .unwrap();
-        stream.flush().unwrap();
+        stream.write(b"HTTP/1.0 404 NOT FOUND\r\n\r\nnot found")?;
+        stream.flush()?;
     }
+    Ok(())
 }
 const HOME_PAGE: &'static str = r"<html><head>
 <meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />
