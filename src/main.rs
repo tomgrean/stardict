@@ -245,9 +245,8 @@ fn main() {
         let mut stream = stream.unwrap();
 
         //pool.execute(
-        match handle_connection(&mut stream, &dict, &cr, &dictdir) {
-            Err(_) => println!("communication failed!"),
-            _ => (),
+        if let Err(_) = handle_connection(&mut stream, &dict, &cr, &dictdir) {
+            println!("communication failed!");
         }
 
         //);
