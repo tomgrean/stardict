@@ -73,9 +73,9 @@ $(document).ready(function() {
 		e.preventDefault();
 		var lookup;
 		if (chkreg.checked) {
-			lookup = "/s/^" + qword.val() + "$";
+			lookup = "/s/^" + encodeURIComponent(qword.val()) + "$";
 		} else {
-			lookup = "/W/" + qword.val();
+			lookup = "/W/" + encodeURIComponent(qword.val());
 		}
 		$.ajax({
 			url:lookup + "?l=" + hlenobj.val(),

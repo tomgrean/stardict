@@ -233,7 +233,7 @@ fn main() {
     //    println!("dict: wordcount:{} {}", d.word_count, d.name);
     //}
     //webs
-    let listener = TcpListener::bind(&host).unwrap();
+    let listener = TcpListener::bind(&host).expect("Bind Socket failed!");
     //let pool = web::ThreadPool::new(4);
     let cr = {
         let mut fmtp = path::PathBuf::from(&dictdir);
@@ -242,7 +242,7 @@ fn main() {
     };
 
     for stream in listener.incoming() {
-        let mut stream = stream.unwrap();
+        let mut stream = stream.expect("accept TCP failed!");
 
         //pool.execute(
         if let Err(_) = handle_connection(&mut stream, &dict, &cr, &dictdir) {
