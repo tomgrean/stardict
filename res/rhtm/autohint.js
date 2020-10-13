@@ -73,7 +73,7 @@ $(document).ready(function() {
 		e.preventDefault();
 		var lookup;
 		if (chkreg.checked) {
-			lookup = "/s/^" + encodeURIComponent(qword.val()) + "$";
+			lookup = "/s/%5E" + encodeURIComponent(qword.val()) + "%24";
 		} else {
 			lookup = "/W/" + encodeURIComponent(qword.val());
 		}
