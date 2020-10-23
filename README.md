@@ -22,6 +22,11 @@ for more information, run `cargo doc` to get the code documents.
 
 Beside stardict tools on the net, you can try dict extract and gendict from [mytool](https://github.com/tomgrean/tools).
 
+## Download Dictionaries
+A plenty of Dictionaries:
+[huzheng's](http://download.huzheng.org)
+XDXF Format is in [bigdict](http://download.huzheng.org/bigdict)
+
 ## Documents
 
 -   [Format for StarDict dictionary files](https://github.com/huzheng001/stardict-3/blob/master/dict/doc/StarDictFileFormat)
