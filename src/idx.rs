@@ -4,12 +4,14 @@ use std::fs;
 use std::io::Read;
 use std::path;
 
+// total bytes used for offset and length
 const OFF_LEN_BYTES: usize = 8;
+
 /// An .idx file representor.
 /// file format:
-/// 1.utf8-coded string with '\0' ending.
-/// 2.offset in dict file u32 or u64(not used for now)
-/// 3.length in dict file u32
+/// 1. utf8-coded string with '\0' ending.
+/// 2. offset in dict file u32 or u64(not used for now)
+/// 3. length in dict file u32
 #[derive(Debug)]
 pub struct Idx {
     content: Vec<u8>, //file content
