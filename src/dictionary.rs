@@ -26,7 +26,7 @@ pub struct Dictionary {
 /// the successful result a lookup would return.
 pub struct LookupResult<'a> {
     pub dictionary: &'a Ifo,
-    pub word: &'a [u8],
+    pub word: Vec<u8>,
     pub result: Vec<u8>,
 }
 /// a regular expression search iterator.
@@ -151,7 +151,7 @@ impl Dictionary {
                 let mut c = i - 1;
                 //left neighbors
                 while let Ok(w) = s.get_word(c) {
-                    if Idx::dict_cmp(word, w, true) == Ordering::Equal {
+                    if Idx::dict_cmp(word, &w, true) == Ordering::Equal {
                         possible.push(s.get_offset(c));
                     } else {
                         break;
@@ -161,7 +161,7 @@ impl Dictionary {
                 //right neighbors
                 c = i + 1;
                 while let Ok(w) = s.get_word(c) {
-                    if Idx::dict_cmp(word, w, true) == Ordering::Equal {
+                    if Idx::dict_cmp(word, &w, true) == Ordering::Equal {
                         possible.push(s.get_offset(c));
                     } else {
                         break;
@@ -190,7 +190,7 @@ impl Dictionary {
     }
 }
 impl<'a> Iterator for IdxIter<'a> {
-    type Item = &'a [u8];
+    type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
         match &self.idx {
             IdxRef::Ref(r) => {
@@ -198,7 +198,7 @@ impl<'a> Iterator for IdxIter<'a> {
                     let v = r.get_word(self.cur);
                     self.cur += 1;
                     if let Ok(e) = v {
-                        if self.matcher.is_match(e) {
+                        if self.matcher.is_match(&e) {
                             return Some(e);
                         }
                     }
@@ -213,7 +213,7 @@ impl<'a> Iterator for IdxIter<'a> {
                     let v = s.get_word(self.cur);
                     self.cur += 1;
                     if let Ok(e) = v {
-                        if self.matcher.is_match(e) {
+                        if self.matcher.is_match(&e) {
                             return Some(e);
                         }
                     }
@@ -224,7 +224,7 @@ impl<'a> Iterator for IdxIter<'a> {
     }
 }
 impl<'a> Iterator for DictNeighborIter<'a> {
-    type Item = &'a [u8];
+    type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
         match &self.idx {
             IdxRef::Ref(r) => {

@@ -18,7 +18,7 @@ impl Dict {
     /// read `length` from `start`
     pub fn read(&self, start: u64, length: usize) -> Result<Vec<u8>, DictError> {
         let mut result = vec![0u8; length];
-        self.dictf.read_exact_at(&mut *result, start)?;
+        self.dictf.read_exact_at(&mut result, start)?;
         Ok(result)
     }
 }

@@ -13,6 +13,7 @@ use self::regex::bytes::Regex;
 use std::cmp::Ordering;
 use std::io::prelude::*;
 use std::iter::Iterator;
+use std::mem;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::{env, fs, path, str};
@@ -25,12 +26,12 @@ pub struct StarDict {
 
 /// An iterator that merges several underlying iterators. try to dedup one duplicated
 /// word from each iterator.
-pub struct WordMergeIter<'a, T: Iterator<Item = &'a [u8]>> {
+pub struct WordMergeIter<T: Iterator<Item = Vec<u8>>> {
     wordit: Vec<T>,
-    cur: Vec<Option<&'a [u8]>>,
+    cur: Vec<Option<Vec<u8>>>,
 }
-impl<'a, T: Iterator<Item = &'a [u8]>> Iterator for WordMergeIter<'a, T> {
-    type Item = &'a [u8];
+impl<'a, T: Iterator<Item = Vec<u8>>> Iterator for WordMergeIter<T> {
+    type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
         let l = self.cur.len();
         if l == 0 {
@@ -40,10 +41,10 @@ impl<'a, T: Iterator<Item = &'a [u8]>> Iterator for WordMergeIter<'a, T> {
         let mut x = 0usize;
         let mut i = 1usize;
         while i < l {
-            x = match (self.cur[x], self.cur[i]) {
+            x = match (&self.cur[x], &self.cur[i]) {
                 (None, _) => i,
                 (_, None) => x,
-                (Some(a), Some(b)) => match idx::Idx::dict_cmp(a, b, false) {
+                (Some(a), Some(b)) => match idx::Idx::dict_cmp(&a, &b, false) {
                     Ordering::Greater => i,
                     Ordering::Equal => {
                         self.cur[i] = self.wordit[i].next();
@@ -54,9 +55,7 @@ impl<'a, T: Iterator<Item = &'a [u8]>> Iterator for WordMergeIter<'a, T> {
             };
             i += 1;
         }
-        let ret = self.cur[x];
-        self.cur[x] = self.wordit[x].next();
-        ret
+        mem::replace(&mut self.cur[x], self.wordit[x].next())
     }
 }
 
@@ -118,7 +117,7 @@ impl StarDict {
     }
     /// Search from all dictionaries. using the specified regular expression.
     /// to match the beginning of a word, use `^`, the ending of a word, use `$`.
-    pub fn search<'a>(&'a self, reg: &'a Regex) -> WordMergeIter<'a, dictionary::IdxIter> {
+    pub fn search<'a>(&'a self, reg: &'a Regex) -> WordMergeIter<dictionary::IdxIter> {
         let mut wordit = Vec::with_capacity(2 * self.directories.len());
         let mut cur = Vec::with_capacity(2 * self.directories.len());
         for d in self.directories.iter() {
@@ -350,7 +349,7 @@ fn handle_connection(
                             content.extend(b"<li><a href='#word_");
                             content.extend(i.to_string().as_bytes());
                             content.extend(b"'>");
-                            content.extend(e.word);
+                            content.extend(&e.word);
                             content.extend(b" : ");
                             content.extend(e.dictionary.name.as_bytes());
                             content.extend(b"</a></li>");
@@ -363,7 +362,7 @@ fn handle_connection(
                             content.extend(b"' class='res_word'>");
                             content.extend(e.dictionary.name.as_bytes());
                             content.extend(b" (");
-                            content.extend(e.word);
+                            content.extend(&e.word);
                             content.extend(b") </div><div class='res_definition'>".iter());
                             for (a, b) in e
                                 .dictionary

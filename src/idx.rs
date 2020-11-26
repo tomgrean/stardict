@@ -1,7 +1,8 @@
 use super::result::DictError;
 use std::cmp::Ordering;
-use std::fs;
-use std::io::Read;
+use std::fs::File;
+use std::io::{BufReader, Read};
+use std::os::unix::prelude::FileExt;
 use std::path;
 
 // total bytes used for offset and length
@@ -14,25 +15,48 @@ const OFF_LEN_BYTES: usize = 8;
 /// 3. length in dict file u32
 #[derive(Debug)]
 pub struct Idx {
-    content: Vec<u8>, //file content
-    index: Vec<u32>,  //end of each word
-                      //off_len_bytes: u32,
+    filedesc: File,  //file descriptor
+    index: Vec<u32>, //end of each word
+
+    firstword: Vec<u8>, //first word
+    lastword: Vec<u8>,  //last word
+                        //cache:
 }
 
 enum ParseState {
+    FirstWord,
+    LastWord,
     Word,
     OffsetLength(u8),
 }
 struct Parser {
     off_len_bytes_m1: u8,
     state: ParseState,
-
+    count_m1: usize,
     off_word: u32,
     result: Vec<u32>,
+    firstw: Vec<u8>,
+    lastw: Vec<u8>,
 }
 impl Parser {
     fn parse(&mut self, x: u8) {
         match self.state {
+            ParseState::FirstWord => {
+                if x == 0 {
+                    self.result.push(self.off_word);
+                    self.state = ParseState::OffsetLength(0);
+                } else {
+                    self.firstw.push(x);
+                }
+            }
+            ParseState::LastWord => {
+                if x == 0 {
+                    self.result.push(self.off_word);
+                    self.state = ParseState::OffsetLength(0);
+                } else {
+                    self.lastw.push(x);
+                }
+            }
             ParseState::Word => {
                 if x == 0 {
                     self.result.push(self.off_word);
@@ -43,7 +67,11 @@ impl Parser {
                 self.state = if n < self.off_len_bytes_m1 {
                     ParseState::OffsetLength(n + 1)
                 } else {
-                    ParseState::Word
+                    if self.result.len() == self.count_m1 {
+                        ParseState::LastWord
+                    } else {
+                        ParseState::Word
+                    }
                 };
             }
         }
@@ -54,24 +82,23 @@ impl Idx {
     /// create Idx struct from a .idx file, with `filesize`, word `count` and some other arguments.
     pub fn open(
         file: &path::Path,
-        filesize: usize,
+        _filesize: usize,
         count: usize,
         off_len_bytes: u8,
     ) -> Result<Idx, DictError> {
-        let mut file_con: Vec<u8>;
-        {
-            let mut idx_file = fs::File::open(file)?;
-            file_con = Vec::with_capacity(filesize + 1); //read to end may realloc...
-            idx_file.read_to_end(&mut file_con)?;
-        }
         let mut con = Parser {
             off_len_bytes_m1: off_len_bytes - 1,
-            state: ParseState::Word,
+            state: ParseState::FirstWord,
+            count_m1: count - 1,
             off_word: 0,
             result: Vec::with_capacity(count),
+            firstw: Vec::new(),
+            lastw: Vec::new(),
         };
-        for x in &file_con {
-            con.parse(*x);
+        {
+            let idx_file = File::open(file)?;
+            let buf_rd = BufReader::new(idx_file);
+            buf_rd.bytes().for_each(|x| con.parse(x.unwrap()));
         }
 
         if count != con.result.len() {
@@ -81,19 +108,20 @@ impl Idx {
                 con.result.len()
             )));
         }
-        //println!("content: {} {}, {}", file_con.len(), file_con.capacity(), filesize);
         Ok(Idx {
-            content: file_con,
+            filedesc: File::open(file)?,
             index: con.result,
+            firstword: con.firstw,
+            lastword: con.lastw,
         })
     }
     /// return the Idx word count.
     pub fn len(&self) -> usize {
         self.index.len()
     }
-    /// retuen the word of Idx in the specified position.
+    /// return the word of Idx in the specified position.
     /// Err(DictError) if not found.
-    pub fn get_word(&self, i: usize) -> Result<&[u8], DictError> {
+    pub fn get_word(&self, i: usize) -> Result<Vec<u8>, DictError> {
         //check range first
         if i >= self.index.len() {
             return Err(DictError::NotFound(i));
@@ -105,7 +133,11 @@ impl Idx {
             self.index[i - 1] as usize + OFF_LEN_BYTES + 1
         };
         let end = self.index[i] as usize;
-        Ok(&self.content[start..end])
+        //get data of [start, end)
+        let mut word_result = vec![0u8; end - start];
+        self.filedesc
+            .read_exact_at(&mut word_result, start as u64)?;
+        Ok(word_result)
     }
 
     /// return the offset and length in .dict file. by the specified position of Idx.
@@ -115,13 +147,11 @@ impl Idx {
             return Err(DictError::NotFound(i));
         }
 
-        let mut start = self.index[i] as usize + 1;
-        let mut buff = [0u8; 4];
-        buff.copy_from_slice(&self.content[start..start + 4]);
-        let offset = u32::from_be_bytes(buff);
-        start += 4;
-        buff.copy_from_slice(&self.content[start..start + 4]);
-        let length = u32::from_be_bytes(buff);
+        let start = self.index[i] as usize + 1;
+        let mut buff = [0u8; 8];
+        self.filedesc.read_exact_at(&mut buff, start as u64)?;
+        let offset = u32::from_be_bytes([buff[0], buff[1], buff[2], buff[3]]);
+        let length = u32::from_be_bytes([buff[4], buff[5], buff[6], buff[7]]);
         Ok((offset, length))
     }
     /// get the position in the Idx. if not found, return Err(usize).
@@ -129,11 +159,10 @@ impl Idx {
     /// try again with case-insensitive find.
     /// the result Err(usize) is used for neighborhood hint.
     pub fn get(&self, word: &[u8]) -> Result<usize, usize> {
-        if Idx::dict_cmp(self.get_word(0).unwrap(), word, true) == Ordering::Greater {
+        if Idx::dict_cmp(&self.firstword, word, true) == Ordering::Greater {
             return Err(0);
         }
-        if Idx::dict_cmp(self.get_word(self.index.len() - 1).unwrap(), word, true) == Ordering::Less
-        {
+        if Idx::dict_cmp(&self.lastword, word, true) == Ordering::Less {
             return Err(self.index.len());
         }
         self.binary_search(word, false)
@@ -148,12 +177,12 @@ impl Idx {
             // mid is always in [0, size), that means mid is >= 0 and < size.
             // mid >= 0: by definition
             // mid < size: mid = size / 2 + size / 4 + size / 8 ...
-            let cmp = Idx::dict_cmp(self.get_word(mid).unwrap(), word, ignore_case);
+            let cmp = Idx::dict_cmp(&self.get_word(mid).unwrap(), word, ignore_case);
             base = if cmp == Ordering::Greater { base } else { mid };
             size -= half;
         }
         // base is always in [0, size) because base <= mid.
-        let cmp = Idx::dict_cmp(self.get_word(base).unwrap(), word, ignore_case);
+        let cmp = Idx::dict_cmp(&self.get_word(base).unwrap(), word, ignore_case);
         if cmp == Ordering::Equal {
             Ok(base)
         } else {
