@@ -19,58 +19,58 @@ pub struct Idx {
     index: Vec<u32>, //end of each word
 
     firstword: Vec<u8>, //first word
+    middleword: Vec<u8>,//middle word
     lastword: Vec<u8>,  //last word
                         //cache:
 }
 
+enum WordPosition {
+    FirstWordPos,
+    MiddleWordPos,
+    LastWordPos,
+    OtherPos
+}
 enum ParseState {
-    FirstWord,
-    LastWord,
-    Word,
+    Word(WordPosition),
     OffsetLength(u8),
 }
 struct Parser {
     off_len_bytes_m1: u8,
     state: ParseState,
     count_m1: usize,
+    count_half: usize,
     off_word: u32,
     result: Vec<u32>,
     firstw: Vec<u8>,
+    middlew: Vec<u8>,
     lastw: Vec<u8>,
 }
 impl Parser {
     fn parse(&mut self, x: u8) {
-        match self.state {
-            ParseState::FirstWord => {
+        match &self.state {
+            ParseState::Word(pos) => {
                 if x == 0 {
                     self.result.push(self.off_word);
                     self.state = ParseState::OffsetLength(0);
                 } else {
-                    self.firstw.push(x);
-                }
-            }
-            ParseState::LastWord => {
-                if x == 0 {
-                    self.result.push(self.off_word);
-                    self.state = ParseState::OffsetLength(0);
-                } else {
-                    self.lastw.push(x);
-                }
-            }
-            ParseState::Word => {
-                if x == 0 {
-                    self.result.push(self.off_word);
-                    self.state = ParseState::OffsetLength(0);
+                    match pos {
+                        WordPosition::FirstWordPos => self.firstw.push(x),
+                        WordPosition::MiddleWordPos => self.middlew.push(x),
+                        WordPosition::LastWordPos => self.lastw.push(x),
+                        _ => (),
+                    }
                 }
             }
             ParseState::OffsetLength(n) => {
-                self.state = if n < self.off_len_bytes_m1 {
-                    ParseState::OffsetLength(n + 1)
+                self.state = if *n < self.off_len_bytes_m1 {
+                    ParseState::OffsetLength(*n + 1)
                 } else {
                     if self.result.len() == self.count_m1 {
-                        ParseState::LastWord
+                        ParseState::Word(WordPosition::LastWordPos)
+                    } else if self.result.len() == self.count_half {
+                        ParseState::Word(WordPosition::MiddleWordPos)
                     } else {
-                        ParseState::Word
+                        ParseState::Word(WordPosition::OtherPos)
                     }
                 };
             }
@@ -88,11 +88,13 @@ impl Idx {
     ) -> Result<Idx, DictError> {
         let mut con = Parser {
             off_len_bytes_m1: off_len_bytes - 1,
-            state: ParseState::FirstWord,
+            state: ParseState::Word(WordPosition::FirstWordPos),
             count_m1: count - 1,
+            count_half: count / 2,
             off_word: 0,
             result: Vec::with_capacity(count),
             firstw: Vec::new(),
+            middlew: Vec::new(),
             lastw: Vec::new(),
         };
         {
@@ -112,6 +114,7 @@ impl Idx {
             filedesc: File::open(file)?,
             index: con.result,
             firstword: con.firstw,
+            middleword: con.middlew,
             lastword: con.lastw,
         })
     }
@@ -127,11 +130,16 @@ impl Idx {
             return Err(DictError::NotFound(i));
         }
 
-        let start = if i == 0 {
-            0usize
-        } else {
-            self.index[i - 1] as usize + OFF_LEN_BYTES + 1
-        };
+        if i == 0 {
+            return Ok(self.firstword.clone());
+        } else if i == self.index.len() - 1 {
+            return Ok(self.lastword.clone());
+        } else if i == self.index.len() / 2 {
+            return Ok(self.middleword.clone());
+        }
+
+        // no i==0 case here.
+        let start = self.index[i - 1] as usize + OFF_LEN_BYTES + 1;
         let end = self.index[i] as usize;
         //get data of [start, end)
         let mut word_result = vec![0u8; end - start];
