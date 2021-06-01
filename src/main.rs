@@ -185,7 +185,8 @@ impl StardictUrl {
     }
 }
 fn main() {
-    let mut host = String::from("localhost:8888");
+    let mut host = String::from("0.0.0.0:8888");
+    //let mut host = String::from("[::]:8888");
     let mut dictdir = String::from("/usr/share/stardict/dic");
     let dict;
     {
@@ -241,10 +242,10 @@ fn main() {
     };
 
     for stream in listener.incoming() {
-        let mut stream = stream.expect("accept TCP failed!");
+        let stream = stream.expect("accept TCP failed!");
 
         //pool.execute(
-        if let Err(_) = handle_connection(&mut stream, &dict, &cr, &dictdir) {
+        if let Err(_) = handle_connection(stream, &dict, &cr, &dictdir) {
             println!("communication failed!");
         }
 
@@ -254,13 +255,48 @@ fn main() {
     println!("Shutting down.");
 }
 fn handle_connection(
-    stream: &mut TcpStream,
+    mut stream: TcpStream,
     dict: &StarDict,
     cr: &reformat::ContentReformat,
     dictdir: &str,
 ) -> std::io::Result<()> {
-    let mut buffer = [0u8; 512];
-    stream.read(&mut buffer)?;
+    //stream.set_nonblocking(false)?;
+    //stream.set_nodelay(false)?;
+    let mut buffer = vec![0u8; 512];
+    {
+        let mut sz = 0usize;
+        while let Ok(bn) = stream.read(&mut buffer[sz..]) {
+            sz = sz + bn;
+
+            let mut stateheader = 0u32;
+            for c in buffer[..sz].iter().rev().take(4) {
+                if *c == b'\n' {
+                    stateheader = stateheader + 1;
+                } else if *c == b'\r' {
+                    stateheader = stateheader + 10;
+                } else {
+                    stateheader = 10000;
+                    break;
+                }
+                if stateheader == 2 || stateheader == 22 {
+                    stateheader = 2;
+                    break;
+                }
+            }
+            if stateheader == 2 {
+                buffer.resize(sz, 0);
+                break;
+            }
+            if sz > 4096 {
+                stream.write(b"HTTP/1.0 414 Request URI Too Long URI\r\n\r\nnot found")?;
+                return Ok(());
+            }
+
+            if sz >= buffer.len() {
+                buffer.resize(buffer.len() * 2, 0);
+            }
+        }
+    }
 
     let get = b"GET /";
 
@@ -437,6 +473,8 @@ fn handle_connection(
         b"text/html"
     }
     if content.len() > 0 {
+        //let mut cg = 0;
+        //content.iter_mut().for_each(|x|{ *x = if cg % 10 == 0 {b'\n'} else {b'a'}; cg = cg + 1;});
         stream.write(b"HTTP/1.0 200 OK\r\nContent-Type: ")?;
         if surl.path[0] == b'n' {
             stream.write(b"text/plain")?;
@@ -448,12 +486,18 @@ fn handle_connection(
         stream.write(b"\r\nContent-Length: ")?;
         stream.write(content.len().to_string().as_bytes())?;
         stream.write(b"\r\nConnection: close\r\n\r\n")?;
+        //stream.write(b"\r\n\r\n")?;
+        /*
+        for blk in content.chunks(1024) {
+            stream.write(blk)?;
+        }
+        */
         stream.write(&content)?;
-        stream.flush()?;
     } else {
         stream.write(b"HTTP/1.0 404 NOT FOUND\r\n\r\nnot found")?;
-        stream.flush()?;
     }
+    stream.flush()?;
+    //stream.shutdown(std::net::Shutdown::Both)?;
     Ok(())
 }
 const HOME_PAGE: &'static str = r"<html><head>

@@ -2,6 +2,7 @@
 name = "stardict"
 version = "0.2.9"
 authors = ["Jeremy Zheng <jitang.zheng@gmail.com>", "TN <tomgrean@github.com>"]
+edition = "2018"
 description = "StarDict for home NAS dictionary web server."
 homepage = "https://github.com/tomgrean/stardict"
 license = "MIT"
