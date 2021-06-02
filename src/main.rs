@@ -266,23 +266,21 @@ fn handle_connection(
     {
         let mut sz = 0usize;
         while let Ok(bn) = stream.read(&mut buffer[sz..]) {
-            sz = sz + bn;
+            sz += bn;
 
-            if (sz > 4
-                && buffer[sz - 4] == b'\r'
+            if bn == 0 || sz <= 4 || sz > 4096 {
+                stream.write(b"HTTP/1.0 417 Expectation Failed\r\n\r\nFail")?;
+                return Ok(());
+            }
+
+            if buffer[sz - 4] == b'\r'
                 && buffer[sz - 3] == b'\n'
                 && buffer[sz - 2] == b'\r'
-                && buffer[sz - 1] == b'\n')
-                || (sz > 2 && buffer[sz - 2] == b'\n' && buffer[sz - 1] == b'\n')
+                && buffer[sz - 1] == b'\n'
             {
                 buffer.resize(sz, 0);
                 break;
             }
-            if sz > 4096 {
-                stream.write(b"HTTP/1.0 414 Request URI Too Long URI\r\n\r\nnot found")?;
-                return Ok(());
-            }
-
             if sz >= buffer.len() {
                 buffer.resize(buffer.len() + 512, 0);
             }
