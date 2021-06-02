@@ -268,10 +268,12 @@ fn handle_connection(
         while let Ok(bn) = stream.read(&mut buffer[sz..]) {
             sz = sz + bn;
 
-            if [b'\n', b'\r', b'\n', b'\r']
-                .iter()
-                .eq(buffer[..sz].iter().rev().take(4))
-                || [b'\n', b'\n'].iter().eq(buffer[..sz].iter().rev().take(2))
+            if (sz > 4
+                && buffer[sz - 4] == b'\r'
+                && buffer[sz - 3] == b'\n'
+                && buffer[sz - 2] == b'\r'
+                && buffer[sz - 1] == b'\n')
+                || (sz > 2 && buffer[sz - 2] == b'\n' && buffer[sz - 1] == b'\n')
             {
                 buffer.resize(sz, 0);
                 break;
