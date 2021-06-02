@@ -18,17 +18,17 @@ pub struct Idx {
     filedesc: File,  //file descriptor
     index: Vec<u32>, //end of each word
 
-    firstword: Vec<u8>, //first word
-    middleword: Vec<u8>,//middle word
-    lastword: Vec<u8>,  //last word
-                        //cache:
+    firstword: Vec<u8>,  //first word
+    middleword: Vec<u8>, //middle word
+    lastword: Vec<u8>,   //last word
+                         //cache:
 }
 
 enum WordPosition {
     FirstWordPos,
     MiddleWordPos,
     LastWordPos,
-    OtherPos
+    OtherPos,
 }
 enum ParseState {
     Word(WordPosition),

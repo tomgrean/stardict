@@ -268,22 +268,11 @@ fn handle_connection(
         while let Ok(bn) = stream.read(&mut buffer[sz..]) {
             sz = sz + bn;
 
-            let mut stateheader = 0u32;
-            for c in buffer[..sz].iter().rev().take(4) {
-                if *c == b'\n' {
-                    stateheader = stateheader + 1;
-                } else if *c == b'\r' {
-                    stateheader = stateheader + 10;
-                } else {
-                    stateheader = 10000;
-                    break;
-                }
-                if stateheader == 2 || stateheader == 22 {
-                    stateheader = 2;
-                    break;
-                }
-            }
-            if stateheader == 2 {
+            if [b'\n', b'\r', b'\n', b'\r']
+                .iter()
+                .eq(buffer[..sz].iter().rev().take(4))
+                || [b'\n', b'\n'].iter().eq(buffer[..sz].iter().rev().take(2))
+            {
                 buffer.resize(sz, 0);
                 break;
             }
@@ -293,7 +282,7 @@ fn handle_connection(
             }
 
             if sz >= buffer.len() {
-                buffer.resize(buffer.len() * 2, 0);
+                buffer.resize(buffer.len() + 512, 0);
             }
         }
     }
