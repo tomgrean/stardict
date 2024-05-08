@@ -1,13 +1,13 @@
-extern crate aho_corasick;
-extern crate regex;
+//extern crate aho_corasick;
+//extern crate regex;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::{fs, io, path};
 
-use self::aho_corasick::AhoCorasick;
-use self::regex::bytes::{NoExpand, Regex};
+use aho_corasick::AhoCorasick;
+use regex::bytes::{NoExpand, Regex};
 
 /// Used to replace strings in the lookup result.
 /// see ContentReformat.

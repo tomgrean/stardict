@@ -1,10 +1,10 @@
-extern crate regex;
+//extern crate regex;
 
 use std::cmp::Ordering;
 use std::{borrow::Cow, fs, path, str};
 
-use self::regex::bytes::Regex;
-use self::regex::Error;
+use regex::bytes::Regex;
+use regex::Error;
 use super::dict::Dict;
 use super::idx::Idx;
 use super::ifo::Ifo;

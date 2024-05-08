@@ -8,5 +8,5 @@ homepage = "https://github.com/tomgrean/stardict"
 license = "MIT"
 
 [dependencies]
-regex = "1"
+regex = "*"
 aho-corasick = "*"

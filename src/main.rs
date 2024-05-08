@@ -1,4 +1,4 @@
-extern crate regex;
+//extern crate regex;
 
 pub mod dict;
 pub mod dictionary;
@@ -9,7 +9,7 @@ pub mod result;
 pub mod syn;
 //pub mod web;
 
-use self::regex::bytes::Regex;
+use regex::bytes::Regex;
 use std::cmp::Ordering;
 use std::io::prelude::*;
 use std::iter::Iterator;
@@ -262,6 +262,7 @@ fn handle_connection(
 ) -> std::io::Result<()> {
     //stream.set_nonblocking(false)?;
     //stream.set_nodelay(false)?;
+    //searched word should be less than 256
     let mut buffer = vec![0u8; 512];
     {
         let mut sz = 0usize;
